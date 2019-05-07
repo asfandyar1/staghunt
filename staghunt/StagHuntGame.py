@@ -186,7 +186,7 @@ class StagHuntGame:
             agent_index = i + 1
             for j, stag_pos in enumerate(self.sPos):
                 stag_index = j + 1
-                var_key = 'd' + str(agent_index) + str(j + 1)
+                var_key = 'd' + str(agent_index) + str(stag_index)
                 mn.set_unary_factor(var_key, np.ones(2))
                 agent_key = 'x' + str(self.horizon) + str(agent_index)
 
