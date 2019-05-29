@@ -6,9 +6,9 @@ from .util import *
 
 # DEFAULT game configuration
 SIZE = (5, 5)
-SPOS = [(3, 3)]
-HPOS = [(1, 1), (1, 5), (5, 1), (5, 5)]
-APOS = [(2, 1), (5, 3)]
+S_POS = [(3, 3)]
+H_POS = [(1, 1), (1, 5), (5, 1), (5, 5)]
+A_POS = [(2, 1), (5, 3)]
 
 # DEFAULT game parameters
 T = 4
@@ -31,7 +31,7 @@ def phi_r1(d1, d2, u1):
     return 1 if condition else 0
 
 
-def phi_ri(u1,d2,u2):
+def phi_ri(u1, d2, u2):
     """
     Straightforward implementation of the phi_{r_{i-1}} factor, i = 3,...,M
     :param u1: d_{(i-1)j} variable, j = 1,...,S
@@ -60,7 +60,7 @@ def edge_factor(var_tuple, pos):
     factor = np.zeros((z_card, x_card))
     for i, el in enumerate(itertools.product(*var_tuple)):
         for j in range(x_card):
-            if j == el[pos]: # indicator function
+            if j == el[pos]:  # indicator function
                 if z_card == 12:
                     factor[i, j] = phi_r1(*el)
                 elif z_card == 18:
@@ -68,9 +68,20 @@ def edge_factor(var_tuple, pos):
     return factor
 
 
+def new_var(var_name, t, agent):
+    """
+    Naming of agent variables xij, where i in {1,...,T} and j in {1,...,M}
+    :param var_name: variable name x, u, d,...
+    :param t: time index
+    :param agent: agent index
+    :return: string with the name of the variable
+    """
+    return var_name + str(t) + str(agent)
+
+
 class StagHuntGame:
 
-    def __init__(self, size=SIZE, s_pos=SPOS, h_pos=HPOS, a_pos=APOS):
+    def __init__(self, size=SIZE, s_pos=S_POS, h_pos=H_POS, a_pos=A_POS):
         """
         Initial configuration of the game.
         :param size: Size of the grid as a 2-tuple
@@ -78,7 +89,7 @@ class StagHuntGame:
         :param h_pos: Positions of the hares as a list of 2-tuples
         :param a_pos: Positions of the agents as a list of 2-tuples
         """
-        self.size = size
+        self._size = size
         self.sPos = s_pos
         self.hPos = h_pos
         self.aPos = a_pos
@@ -86,7 +97,7 @@ class StagHuntGame:
         self._r_s = RS
         self._lmb = LAMBDA
         self._horizon = T
-        self.N = np.prod(size)
+        self.N = int(np.prod(size))
 
     @property
     def r_h(self):
@@ -104,6 +115,10 @@ class StagHuntGame:
     def horizon(self):
         return self._horizon
 
+    @property
+    def size(self):
+        return self._size
+
     @r_h.setter
     def r_h(self, value):
         self._r_h = value
@@ -120,7 +135,16 @@ class StagHuntGame:
     def horizon(self, value):
         self._horizon = value
 
+    @size.setter
+    def size(self, value):
+        self._size = value
+        self.N = np.prod(value)
+
     def display(self):
+        """
+        Prints the game configuration on the screen
+        :return: None
+        """
         if len(self.size) == 2:
             s_x, s_y = np.transpose(np.array(self.sPos))
             h_x, h_y = np.transpose(np.array(self.hPos))
@@ -141,6 +165,7 @@ class StagHuntGame:
     def reward(self, a_pos):
         """
         State dependent reward
+        :param a_pos: position of the agents in the game
         :return: reward
         """
         if not a_pos:  # not informed
@@ -152,7 +177,7 @@ class StagHuntGame:
 
     def phi_q(self, x1, x2):
         """
-        Value of the binary factor phi_q for a given markov state transition
+        Binary factor phi_q for a given markov state transition
         :param x1: agent position at time t
         :param x2: agent position at time t+1
         :return: factor value, binary
@@ -176,7 +201,7 @@ class StagHuntGame:
 
     def get_index(self, pos):
         """
-        Converts the position expressed in cartesian coordinates to an index i in {0,...,N-1}
+        Converts the position expressed in cartesian coordinates into an index i in {0,...,N-1}
         :param pos: position (x,y) in {1,...,size_x} x {1,...,size_y}
         :return: index i in {0,...,N-1}
         """
@@ -186,7 +211,7 @@ class StagHuntGame:
 
     def get_pos(self, index):
         """
-        Converts the position expressed as an index i in {1,...,N} in cartesian coordinates
+        Converts the position expressed as an index i in {1,...,N} into cartesian coordinates
         :param index: index i in {1,...,N}
         :return: position (x,y) in {1,...,size_x} x {1,...,size_y}
         """
@@ -206,28 +231,26 @@ class StagHuntMRF(StagHuntGame):
     def __init__(self):
         """
         MRF formulation of the game, using mrftools package
-        :param game: instance of StagHuntGame
         """
         super().__init__()
         self.mrf = None
         self.bp = None
 
-    def build_model(self):
+    def _set_agent_vars(self, mn):
         """
-        Builds the mrftools library MarkovNet model based on the game definition
-        :return: none - sets markov_net attribute
+        Sets clamped unary potentials to x11,...,x1M
+        Sets uniform unary potentials to x21,...,x2M,...,x(T-1)M
+        Sets hare-reward unary potentials to xT1,...,xTM
+        All unary factors involving agent variables are defined here
+        :param mn: MarkovNet object
+        :return: Modified MarkovNet object
         """
-        mn = MarkovNet()
-
-        # clamp initial state to localised unary potentials
-        # set uniform unary potentials to x21,...,x2M,...,xTM
-        # all unary factors involving agent variables are defined here
         for i in range(1, self.horizon + 1):
             for j, agent_pos in enumerate(self.aPos):
                 agent_index = j + 1
-                var_key = 'x' + str(i) + str(agent_index)
+                var_key = new_var('x', i, agent_index)
                 if i == 1:  # t = 1 initial state -> clamp
-                    factor = np.zeros(self.N)
+                    factor = np.array(self.N * [-float('inf')])  # not np.zeros(self.N)
                     factor[self.get_index(agent_pos)] = 1
                 elif i < self.horizon:  # t = 2,...,T-1 -> uniform
                     factor = np.ones(self.N)
@@ -238,16 +261,93 @@ class StagHuntMRF(StagHuntGame):
                 # set factor
                 mn.set_unary_factor(var_key, factor)
 
+        return mn
+
+    def _set_uncontrolled_dynamics(self, mn):
+        """
+        Sets the uncontrolled dynamics pairwise factors phi_q: (x11,x21),...,(x(T-1)1,xT1),...,(x(T-1)M,xTM)
+        :param mn: MarkovNet object
+        :return: Modified MarkovNet object
+        """
+        # build the phi_q factor, which is the same for every variable pair
+        phi_q = np.zeros((self.N, self.N))
+        for i in range(self.N):
+            for j in range(self.N):
+                phi_q[i, j] = self.phi_q(self.get_pos(i), self.get_pos(j))
+        # and set the factor forming the chains
+        for i in range(1, self.horizon):
+            for j in range(1, len(self.aPos) + 1):
+                var_keys = (new_var('x', i, j), new_var('x', i + 1, j))
+                mn.set_edge_factor(var_keys, phi_q)
+        return mn
+
+    def build_random_walk(self):
+        """
+        Builds a mrftools MarkovNet model
+        :return:
+        """
+
+        if len(self.aPos) != 2:
+            raise ValueError('Ground truth model can only be built when the number of agents is 2')
+
+        mn = MarkovNet()
+        mn = self._set_agent_vars(mn)
+        mn = self._set_uncontrolled_dynamics(mn)
+
+        # let us overwrite the unary factors at time T and set them to uniform factors
+        for agent_index in range(1, len(self.aPos) + 1):
+            var_key = new_var('x', self.horizon, agent_index)
+            factor = np.ones(self.N)
+            mn.set_unary_factor(var_key, factor)
+
+        mn.create_matrices()
+        self.mrf = mn
+
+    def build_ground_model(self):
+        """
+        Builds the mrftools MarkovNet ground truth model based on the game definition
+        Works only if the number of agents is exactly equal to 2
+        :return: none - sets markov_net attribute
+        """
+
+        if len(self.aPos) != 2:
+            raise ValueError('Ground truth model can only be built when the number of agents is 2')
+
+        mn = MarkovNet()
+        mn = self._set_agent_vars(mn)
+        mn = self._set_uncontrolled_dynamics(mn)
+
+        # stag control factor -> ones and stag reward when both agents are in the position of a stag
+        factor = np.ones((self.N, self.N))
+        for stag_pos in self.sPos:
+            s_ind = self.get_index(stag_pos)
+            factor[s_ind, s_ind] = np.exp(-self.r_s / self.lmb)
+        # one factor
+        var_keys = (new_var('x', self.horizon, 1), new_var('x', self.horizon, 2))
+        mn.set_edge_factor(var_keys, factor)
+
+        mn.create_matrices()
+        self.mrf = mn
+
+    def build_model(self):
+        """
+        Builds the mrftools library MarkovNet model based on the game definition
+        :return: none - sets markov_net attribute
+        """
+        mn = MarkovNet()
+
+        mn = self._set_agent_vars(mn)
+
         # uncontrolled dynamics pairwise factors phi_q
         # build the phi_q factor, which is the same for every variable pair
-        phi_q = np.zeros((25, 25))
-        for i in range(25):
-            for j in range(25):
+        phi_q = np.zeros((self.N, self.N))
+        for i in range(self.N):
+            for j in range(self.N):
                 phi_q[i, j] = self.phi_q(self.get_pos(i), self.get_pos(j))
         # and set the factor forming the chains
         for i in range(1, self.horizon):
             for j in range(1, len(self.aPos)+1):
-                var_keys = ('x' + str(i) + str(j), 'x' + str(i+1) + str(j))
+                var_keys = (new_var('x', i, j), new_var('x', i + 1, j))
                 mn.set_edge_factor(var_keys, phi_q)
 
         # unary and pairwise factors involving auxiliary variables d_ij, u_ij, z_ij
@@ -260,12 +360,12 @@ class StagHuntMRF(StagHuntGame):
                 mn.set_unary_factor(var_key_d, np.ones(2))
                 # declare u_{ij} variables and set uniform unary potentials
                 if agent_index > 1:
-                    var_key_u = 'u' + str(agent_index) + str(stag_index)
+                    var_key_u = new_var('u', agent_index, stag_index)
                     mn.set_unary_factor(var_key_u, np.ones(3))
-                    var_key_z = 'z' + str(agent_index) + str(stag_index)
+                    var_key_z = new_var('z', agent_index, stag_index)
                     if agent_index == 2:
                         mn.set_unary_factor(var_key_z, np.ones(12))
-                        mn.set_edge_factor((var_key_z, 'd' + str(agent_index-1) + str(stag_index)),
+                        mn.set_edge_factor((var_key_z, new_var('d', agent_index-1, stag_index)),
                                            edge_factor(([0, 1], [0, 1], [0, 1, 2]), 0))
                         mn.set_edge_factor((var_key_z, var_key_d),
                                            edge_factor(([0, 1], [0, 1], [0, 1, 2]), 1))
@@ -277,11 +377,11 @@ class StagHuntMRF(StagHuntGame):
                                            edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 1))
                         mn.set_edge_factor((var_key_z, var_key_u),
                                            edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 2))
-                        mn.set_edge_factor((var_key_z, 'u' + str(agent_index - 1) + str(stag_index)),
+                        mn.set_edge_factor((var_key_z, new_var('u', agent_index-1, stag_index)),
                                            edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 0))
 
                 # build and set phi_{s_j} potentials
-                var_key_x = 'x' + str(self.horizon) + str(agent_index)
+                var_key_x = new_var('x', self.horizon, agent_index)
                 # inefficient but obvious way to fill the potential phi_{s_j}
                 phi_s = np.zeros((self.N, 2))
                 for x in range(phi_s.shape[0]):
@@ -294,22 +394,44 @@ class StagHuntMRF(StagHuntGame):
         factor = np.ones(3)
         factor[2] = np.exp(-self.r_s / self.lmb)
         for j in range(len(self.sPos)):
-            mn.set_unary_factor('u' + str(len(self.aPos)) + str(j+1), factor)
+            mn.set_unary_factor(new_var('u', len(self.aPos), j+1), factor)
 
         mn.create_matrices()
         self.mrf = mn
 
-    def slow_infer(self):
+    def infer(self, inference_type='slow', max_iter=30000):
         """
-        Runs slow inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object
+        Runs matrix inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object.
         :return: None
         """
-        slow_bp = BeliefPropagator(self.mrf)
-        slow_bp.set_max_iter(30000)
-        slow_bp.infer(display='final')
-        slow_bp.compute_beliefs()
-        slow_bp.compute_pairwise_beliefs()
-        self.bp = slow_bp
+        if inference_type == 'slow':
+            bp = BeliefPropagator(self.mrf)
+        elif inference_type == 'matrix':
+            bp = MatrixBeliefPropagator(self.mrf)
+        bp.set_max_iter(max_iter)
+        bp.infer(display='final')
+        bp.load_beliefs()
+        self.bp = bp
+
+    def compute_probabilities(self):
+        """
+        If the bp object is loaded, computes the conditional probabilities for every variable pair in pair_beliefs
+        :return: None
+        """
+        if self.bp:
+            # convert variable beliefs into probabilities
+            self.bp.var_probabilities = {}
+            for key in self.bp.var_beliefs:
+                self.bp.var_probabilities[key] = np.exp(self.bp.var_beliefs[key])
+
+            # compute pair conditional probabilities from pair (joint) probabilities and var probabilities
+            # P(x2 | x1) is stored in key (x1, x2)
+            self.bp.conditional_probabilities = {}
+            for key in self.bp.pair_beliefs:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    self.bp.conditional_probabilities[key] = \
+                        np.transpose(np.transpose(np.exp(self.bp.pair_beliefs[key])) /
+                                     np.exp(self.bp.var_beliefs[key[0]]))
 
     def print_trajectories(self):
         """
@@ -318,9 +440,7 @@ class StagHuntMRF(StagHuntGame):
         """
         for i in range(1, len(self.aPos) + 1):
             for t in range(1, self.horizon):
-                var_key = ('x' + str(t) + str(i), 'x' + str(t+1) + str(i))
-                trans_mat = self.bp.pair_beliefs[var_key]
+                var_key = ('x' + str(t+1) + str(i), 'x' + str(t) + str(i))
+                trans_mat = np.exp(self.bp.conditional_probabilities[var_key])
                 index_trans = np.unravel_index(np.argmax(trans_mat), trans_mat.shape)
                 print('Agent ' + str(i), self.get_pos(index_trans[0]), ' -> ', self.get_pos(index_trans[1]))
-
-
