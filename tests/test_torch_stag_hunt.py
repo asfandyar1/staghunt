@@ -1,7 +1,6 @@
-"""Test class to test stag hunt game implementation"""
 import unittest
-
 from staghunt import *
+import numpy as np
 
 
 class TestStagHunt(unittest.TestCase):
@@ -15,101 +14,91 @@ class TestStagHunt(unittest.TestCase):
         Asserts that the results of BP are the same in both of them, thus giving the same trajectories
         :return: None
         """
-        ground_model, pairwise_model = setup_two_models()
+        ground_model, pairwise_model = setup_two_models(type1='torch', type2='torch')
 
         ground_model.build_ground_model()
         pairwise_model.build_model()
 
-        for i in range(ground_model.horizon-1):
-            ground_model.infer(inference_type='slow')
+        for i in range(ground_model.horizon - 1):
+            print("Ground:   ", end='')
+            ground_model.infer()
             ground_model.compute_probabilities()
             ground_model.move_next(break_ties='first')
             ground_model.update_model()
 
-            pairwise_model.infer(inference_type='slow')
+            print("Pairwise: ", end='')
+            pairwise_model.infer()
             pairwise_model.compute_probabilities()
             pairwise_model.move_next(break_ties='first')
             pairwise_model.update_model()
 
             # compare marginals
             assert compare_beliefs(ground_model.bp.var_probabilities, pairwise_model.bp.var_probabilities)
-
             # compare computed conditional probabilities used to decide next step
             for key in ground_model.bp.conditional_probabilities:
-                if not(key == (new_var('x', ground_model.horizon, 1), new_var('x', ground_model.horizon, 2))
+                if not (key == (new_var('x', ground_model.horizon, 1), new_var('x', ground_model.horizon, 2))
                         or key == (new_var('x', ground_model.horizon, 2), new_var('x', ground_model.horizon, 1))):
                     c = ground_model.bp.conditional_probabilities[key]
                     d = pairwise_model.bp.conditional_probabilities[key]
                     assert np.allclose(c, d, equal_nan=True)
 
-    def test_slow_vs_matrix(self):
+    def test_matrix_vs_torch(self):
         """
-        Tests the consistency of matrix BP versus slow BP that has been tested vs the ground truth model
+        Tests the consistence between python and torch matrix BP
         :return:
         """
-        slow_model, matrix_model = setup_two_models()
+        matrix_model, torch_model = setup_two_models(type1='python', type2='torch')
 
-        slow_model.build_model()
+        matrix_model.MIN = -float('inf')
         matrix_model.build_model()
+        torch_model.build_model()
 
-        for i in range(slow_model.horizon - 1):
-            slow_model.infer(inference_type='slow')
-            slow_model.compute_probabilities()
-            slow_model.move_next(break_ties='first')
-            slow_model.update_model()
+        assert np.all(torch_model.mrf.unary_mat.numpy() == matrix_model.mrf.unary_mat), \
+            "unary matrices are not equal"
+        assert np.all(torch_model.mrf.edge_pot_tensor.numpy() == matrix_model.mrf.edge_pot_tensor), \
+            "edge tensors are not equal"
 
+        for i in range(matrix_model.horizon - 1):
+            print("Matrix: ", end='')
             matrix_model.infer(inference_type='matrix')
             matrix_model.compute_probabilities()
             matrix_model.move_next(break_ties='first')
             matrix_model.update_model()
 
+            print("Torch:  ", end='')
+            torch_model.infer()
+            torch_model.compute_probabilities()
+            torch_model.move_next(break_ties='first')
+            torch_model.update_model()
+
+            assert matrix_model.aPos == torch_model.aPos, "Trajectories differ"
+
             # compare marginals
-            assert compare_beliefs(slow_model.bp.var_probabilities, matrix_model.bp.var_probabilities)
-
+            assert compare_beliefs(matrix_model.bp.var_probabilities, torch_model.bp.var_probabilities), \
+                "Marginal probabilities differ"
             # compare conditional probabilities
-            assert compare_beliefs(slow_model.bp.conditional_probabilities, matrix_model.bp.conditional_probabilities)
-
-    def test_clamp_vs_advance(self):
-        """
-        Is it the same to advance by clamping states than by shortening the model clamping only the first state?
-        :return:
-        """
-        clamp_model, advance_model = setup_two_models()
-
-        clamp_model.build_model()
-        advance_model.build_model()
-
-        clamp_trajectories = []
-        advance_trajectories = []
-        for i in range(clamp_model.horizon-1):
-            clamp_trajectories.append(clamp_model.aPos.copy())
-            clamp_model.infer(inference_type='slow')
-            clamp_model.compute_probabilities()
-            clamp_model.move_next(break_ties='first')
-            clamp_model.update_model()
-
-            advance_trajectories.append(advance_model.aPos.copy())
-            advance_model.infer(inference_type='slow')
-            advance_model.compute_probabilities()
-            advance_model.move_next(break_ties='first')
-            advance_model.time = 1
-            advance_model.horizon -= 1
-            advance_model.build_model()
-
-        clamp_trajectories.append(clamp_model.aPos.copy())
-        advance_trajectories.append(advance_model.aPos.copy())
-
-        assert np.all(advance_trajectories == clamp_trajectories)
+            assert compare_beliefs(matrix_model.bp.conditional_probabilities,
+                                   torch_model.bp.conditional_probabilities), \
+                "Conditional probabilities differ"
 
 
-def setup_two_models(num_agents=2):
+def setup_two_models(num_agents=2, type1='python', type2='python'):
     """
     Utility to set up two different instances of StagHuntMRF with the exact same random configuration
     :param num_agents: Number of agents
+    :param type1: Type of the first model: python or torch
+    :param type2: Type of the second model: python or torch
     :return: Two StagHuntMRF instances
     """
-    model_1 = MatrixStagHuntModel()
-    model_2 = MatrixStagHuntModel()
+    if type1 == 'python':
+        model_1 = MatrixStagHuntModel()
+    else:
+        model_1 = TorchStagHuntModel()
+
+    if type2 == 'python':
+        model_2 = MatrixStagHuntModel()
+    else:
+        model_2 = TorchStagHuntModel()
 
     # random.seed(1)
     lmb = random.uniform(0.1, 10)
@@ -128,6 +117,7 @@ def setup_two_models(num_agents=2):
     model_2.r_h = r_h
     model_2.r_s = r_s
     model_2.horizon = horizon
+    model_2.size = (size, size)
     model_2.set_game_config(game_conf=model_1.get_game_config())
 
     return model_1, model_2
@@ -142,7 +132,12 @@ def compare_beliefs(belief_dict_1, belief_dict_2):
     """
     check = []
     for key in belief_dict_1:
-        a = belief_dict_1[key]
-        b = belief_dict_2[key]
-        check.append(np.allclose(a, b, equal_nan=True))
-    return check
+        if key[0] == 'x':
+            a = belief_dict_1[key]
+            if not isinstance(a, np.ndarray):
+                a = a.numpy()
+            b = belief_dict_2[key]
+            if not isinstance(b, np.ndarray):
+                b = b.numpy()
+            check.append(np.allclose(a, b, equal_nan=True))
+    return all(check)
