@@ -1,6 +1,8 @@
 import unittest
-from staghunt import *
+import random
 import numpy as np
+import torch as t
+from staghunt import MatrixStagHuntModel, TorchStagHuntModel, new_var
 
 
 class TestStagHunt(unittest.TestCase):
@@ -10,8 +12,7 @@ class TestStagHunt(unittest.TestCase):
 
     def test_ground_vs_pairwise(self):
         """
-        Tests the correctness of the simplified pairwise model by comparing it with the ground truth model
-        Asserts that the results of BP are the same in both of them, thus giving the same trajectories
+        TORCH: Correctness of the simplified pairwise model vs the ground truth model
         :return: None
         """
         ground_model, pairwise_model = setup_two_models(type1='torch', type2='torch')
@@ -44,7 +45,7 @@ class TestStagHunt(unittest.TestCase):
 
     def test_matrix_vs_torch(self):
         """
-        Tests the consistence between python and torch matrix BP
+        TORCH: Consistency between python and torch matrix BP
         :return:
         """
         matrix_model, torch_model = setup_two_models(type1='python', type2='torch')
@@ -79,6 +80,49 @@ class TestStagHunt(unittest.TestCase):
             # compare conditional probabilities
             assert compare_beliefs(matrix_model.bp.conditional_probabilities,
                                    torch_model.bp.conditional_probabilities), \
+                "Conditional probabilities differ"
+
+    def test_cpu_vs_cuda(self):
+        """
+        TORCH: Consistency between CUDA and CPU matrix BP
+        :return:
+        """
+        if not t.cuda.is_available():
+            print('\nCUDA is not available in this machine')
+            return
+
+        cpu_model, cuda_model = setup_two_models(type1='torch', type2='torch')
+
+        cuda_model.is_cuda = True
+
+        cpu_model.build_model()
+        cuda_model.build_model()
+
+        assert t.equal(cuda_model.mrf.unary_mat.cpu(), cpu_model.mrf.unary_mat), \
+            "unary matrices are not equal"
+        assert t.equal(cuda_model.mrf.edge_pot_tensor.cpu(), cpu_model.mrf.edge_pot_tensor), \
+            "edge tensors are not equal"
+
+        for i in range(cpu_model.horizon - 1):
+            print("CPU: ", end='')
+            cpu_model.infer()
+            cpu_model.compute_probabilities()
+            cpu_model.move_next(break_ties='first')
+            cpu_model.update_model()
+
+            print("CUDA:  ", end='')
+            cuda_model.infer()
+            cuda_model.compute_probabilities()
+            cuda_model.move_next(break_ties='first')
+            cuda_model.update_model()
+
+            assert cpu_model.aPos == cuda_model.aPos, "Trajectories differ"
+
+            # compare marginals
+            assert compare_beliefs(cpu_model.bp.var_probabilities, cuda_model.bp.var_probabilities), \
+                "Marginal probabilities differ"
+            # compare conditional probabilities
+            assert compare_beliefs(cpu_model.bp.conditional_probabilities, cuda_model.bp.conditional_probabilities), \
                 "Conditional probabilities differ"
 
 
@@ -134,10 +178,16 @@ def compare_beliefs(belief_dict_1, belief_dict_2):
     for key in belief_dict_1:
         if key[0] == 'x':
             a = belief_dict_1[key]
-            if not isinstance(a, np.ndarray):
-                a = a.numpy()
+            if isinstance(a, t.Tensor):
+                if a.is_cuda:
+                    a = a.cpu().numpy()
+                else:
+                    a = a.numpy()
             b = belief_dict_2[key]
-            if not isinstance(b, np.ndarray):
-                b = b.numpy()
+            if isinstance(b, t.Tensor):
+                if b.is_cuda:
+                    b = b.cpu().numpy()
+                else:
+                    b = b.numpy()
             check.append(np.allclose(a, b, equal_nan=True))
     return all(check)

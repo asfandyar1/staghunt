@@ -11,8 +11,7 @@ class TestStagHunt(unittest.TestCase):
 
     def test_ground_vs_pairwise(self):
         """
-        Tests the correctness of the simplified pairwise model by comparing it with the ground truth model
-        Asserts that the results of BP are the same in both of them, thus giving the same trajectories
+        Correctness of the simplified pairwise model vs the ground truth model
         :return: None
         """
         ground_model, pairwise_model = setup_two_models()
@@ -44,7 +43,7 @@ class TestStagHunt(unittest.TestCase):
 
     def test_slow_vs_matrix(self):
         """
-        Tests the consistency of matrix BP versus slow BP that has been tested vs the ground truth model
+        Consistency of matrix BP versus slow BP
         :return:
         """
         slow_model, matrix_model = setup_two_models()
