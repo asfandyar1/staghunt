@@ -43,6 +43,30 @@ class TorchStagHuntModel(StagHuntModel):
                 mn.set_unary_factor(var_key, factor)
         return mn
 
+    def build_phi_q(self):
+        """
+        Efficient way to compute the pairwise factor between agent vars (uncontrolled dynamics)
+        :return:
+        """
+        phi_q = t.zeros(self.N, self.N, requires_grad=self.var_on, dtype=t.float64).fill_(self.MIN)
+        if self.is_cuda:
+            phi_q = phi_q.cuda()
+
+        # diagonal
+        phi_q[range(self.N), range(self.N)] = 0
+        # n-diagonals
+        phi_q[range(self.N - self.size[0]), range(self.size[0], self.N)] = 0
+        phi_q[range(self.size[0], self.N), range(self.N - self.size[0])] = 0
+        # diagonal starting at index 1
+        index_1 = t.arange(self.N - 1)
+        index_1 = index_1[(index_1 + 1) % self.size[0] != 0]
+        index_2 = t.arange(1, self.N)
+        index_2 = index_2[index_2 % self.size[0] != 0]
+        phi_q[index_1, index_2] = 0
+        phi_q[index_2, index_1] = 0
+
+        return phi_q
+
     def _set_uncontrolled_dynamics(self, mn):
         """
         Sets the uncontrolled dynamics pairwise factors phi_q: (x11,x21),...,(x(T-1)1,xT1),...,(x(T-1)M,xTM)
@@ -50,10 +74,7 @@ class TorchStagHuntModel(StagHuntModel):
         :return: Modified MarkovNet object
         """
         # build the phi_q factor, which is the same for every variable pair
-        phi_q = t.zeros(self.N, self.N, dtype=t.float64).fill_(self.NEU)
-        for i in range(self.N):
-            for j in range(self.N):
-                phi_q[i, j] = self.phi_q(self.get_pos(i), self.get_pos(j))
+        phi_q = self.build_phi_q()
         # and set the factor forming the chains
         for i in range(1, self.horizon):
             for j in range(1, len(self.aPos) + 1):
@@ -86,6 +107,7 @@ class TorchStagHuntModel(StagHuntModel):
 
         mn.create_matrices()
         self.mrf = mn
+        self.build = 1
 
     def build_model(self):
         """
@@ -152,19 +174,287 @@ class TorchStagHuntModel(StagHuntModel):
 
         mn.create_matrices()
         self.mrf = mn
+        self.build = 1
+
+    def _clamp_agents(self):
+        """
+        Util that clamps the position of the agents to the current time index
+        :return:
+        """
+        factors = self.MIN * t.ones((self.N, len(self.aPos)), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factors = factors.cuda()
+        for index, agent in enumerate(self.aPos):
+            factors[self.get_index(agent), index] = self.NEU
+        self.mrf.unary_mat[:, t.arange((self.time - 1)*len(self.aPos), self.time*len(self.aPos))] = factors
+
+    def _fast_util(self, f_start, n_slices, chunk, from_cols, to_cols):
+        if not chunk.shape == t.Size([0]):
+            f_end = f_start + n_slices
+            b_start = self.mrf.num_edges + f_start
+            b_end = b_start + n_slices
+            self.mrf.edge_pot_tensor[0:chunk.shape[0], 0:chunk.shape[1], f_start:f_end] = chunk
+            self.mrf.edge_pot_tensor[0:chunk.shape[1], 0:chunk.shape[0], b_start:b_end] = chunk.transpose(1, 0)
+            f_messages = list(range(f_start, f_end))
+            b_messages = list(range(b_start, b_end))
+            self.mrf.f_rows += f_messages
+            self.mrf.t_rows += f_messages
+            self.mrf.f_rows += b_messages
+            self.mrf.t_rows += b_messages
+            self.mrf.f_cols += from_cols
+            self.mrf.t_cols += to_cols
+            self.mrf.f_cols += to_cols
+            self.mrf.t_cols += from_cols
+            self.mrf.message_index.update({(self.mrf.var_list[from_cols[i]],
+                                            self.mrf.var_list[to_cols[i]]): (i + f_start)
+                                           for i in range(n_slices)})
+
+    def fast_build_model(self):
+        """
+        Build the model by directly building the tensors
+        :return:
+        """
+        if self.N < 18:
+            print("Fast model building is only available for game sizes N >= 18")
+            return
+
+        self.mrf = TorchMarkovNet(is_cuda=self.is_cuda, var_on=self.var_on)
+        self.mrf.matrix_mode = True
+
+        self.mrf.max_states = self.N
+        n_stag = len(self.sPos)
+        n_agnt = len(self.aPos)
+        n_vars = n_agnt * self.horizon + n_stag * (n_agnt + 2 * (n_agnt - 1))
+        n_edges = n_agnt * (self.horizon - 1) + n_agnt * n_stag + 3 * (n_agnt - 1) * n_stag
+        self.mrf.degrees = t.zeros(n_vars, requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            self.mrf.degrees = self.mrf.degrees.cuda()
+
+        # VARIABLES OF THE MODEL
+        self.mrf.var_list = []
+        self.mrf.var_len = {}
+        # agent vars
+        self.mrf.var_list += [new_var('x', i + 1, j + 1) for i in range(self.horizon) for j in range(n_agnt)]
+        self.mrf.var_len.update({new_var('x', i + 1, j + 1): self.N
+                                 for i in range(self.horizon) for j in range(n_agnt)})
+        # d vars
+        self.mrf.var_list += [new_var('d', i + 1, j + 1) for j in range(n_stag) for i in range(n_agnt)]
+        self.mrf.var_len.update({new_var('d', i + 1, j + 1): 2 for j in range(n_stag) for i in range(n_agnt)})
+        # u vars
+        self.mrf.var_list += [new_var('u', i + 2, j + 1) for j in range(n_stag) for i in range(n_agnt - 1)]
+        self.mrf.var_len.update({new_var('u', i + 2, j + 1): 3 for j in range(n_stag) for i in range(n_agnt - 1)})
+        # z vars
+        self.mrf.var_list += [new_var('z', i + 2, j + 1) for i in range(n_agnt - 1) for j in range(n_stag)]
+        self.mrf.var_len.update({new_var('z', 2, j + 1): 12 for j in range(n_stag)})
+        self.mrf.var_len.update({new_var('z', i + 3, j + 1): 18 for i in range(n_agnt - 2) for j in range(n_stag)})
+        # index
+        self.mrf.var_index = {self.mrf.var_list[i]: i for i in range(len(self.mrf.var_list))}
+        self.mrf.variables = set(self.mrf.var_list)
+
+        # UNARY POTENTIALS MATRIX
+        self.mrf.unary_mat = -float('inf') * t.ones((self.N, n_vars), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            self.mrf.unary_mat = self.mrf.unary_mat.cuda()
+        # clamped agent vars
+        self._clamp_agents()
+        # non-clamped agent vars
+        col_start = n_agnt
+        col_end = n_agnt * self.horizon
+        factor = self.NEU * t.ones((self.N, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[:, t.arange(n_agnt, col_end)] = factor
+        self.mrf.unary_mat[[i for s in [n_agnt*[self.get_index(pos)] for pos in self.hPos] for i in s],
+                           len(self.hPos)*list(range(col_end-col_start, col_end))] = -self.r_h / self.lmb
+        # d vars
+        col_start = col_end
+        col_end = col_start + n_agnt*n_stag
+        factor = self.NEU * t.ones((2, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[0:2, col_start:col_end] = factor
+        # u vars
+        col_start = col_end
+        col_end = col_start + n_stag*(n_agnt - 1)
+        factor = self.NEU * t.ones((3, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[0:3, col_start:col_end] = factor
+        factor = (-self.r_s / self.lmb) * t.ones(n_stag, requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[2, self._get_var_indices([new_var('u', n_agnt, i+1) for i in range(n_stag)])] = factor
+        # z vars
+        col_start = col_end
+        col_end = col_start + n_stag
+        factor = self.NEU * t.ones((12, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[0:12, col_start:col_end] = factor
+        col_start = col_end
+        col_end = col_start + n_stag*(n_agnt - 2)
+        factor = self.NEU * t.ones((18, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self.mrf.unary_mat[0:18, col_start:col_end] = factor
+
+        # EDGE POTENTIALS TENSOR
+        self.mrf.num_edges = n_edges
+        self.mrf.edge_pot_tensor = -float('inf') * t.ones((self.N, self.N, 2 * self.mrf.num_edges),
+                                                          requires_grad=self.var_on, dtype=t.float64)
+        if self.is_cuda:
+            self.mrf.edge_pot_tensor = self.mrf.edge_pot_tensor.cuda()
+        self.mrf.message_index = {}
+        # set up sparse matrix representation of adjacency
+        self.mrf.f_rows, self.mrf.f_cols, self.mrf.t_rows, self.mrf.t_cols = [], [], [], []
+
+        # phi_q potentials between x vars
+        start = 0
+        n_slices = n_agnt * (self.horizon - 1)
+        factor = self.build_phi_q().repeat(n_agnt*(self.horizon - 1), 1, 1).transpose(0, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices,
+                        chunk=factor,
+                        from_cols=list(range(0, n_slices)), to_cols=list(range(n_agnt, n_agnt + n_slices)))
+
+        # phi_s potentials between x vars and d vars
+        start += n_slices
+        n_slices = n_agnt * n_stag
+        stack = t.stack((self.NEU * t.ones(self.N, requires_grad=self.var_on, dtype=t.float64),
+                         self.MIN * t.ones(self.N, requires_grad=self.var_on, dtype=t.float64)))
+        factor = stack.repeat((n_agnt*n_stag, 1, 1)).transpose(0, 1).transpose(1, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        s_index = [i for s in [n_agnt*[self.get_index(pos)] for pos in self.sPos] for i in s]
+        factor[((n_agnt * n_stag) * [0], s_index, range(n_agnt * n_stag))] = self.MIN
+        factor[((n_agnt * n_stag) * [1], s_index, range(n_agnt * n_stag))] = self.NEU
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=n_stag * list(range(n_agnt * (self.horizon - 1), n_agnt * self.horizon)),
+                        to_cols=list(range(n_agnt * self.horizon, n_agnt * (self.horizon + n_stag))))
+
+        # factors between d_1j - z_2j, and d_2j and z_2j
+        start += n_slices
+        n_slices = 2 * n_stag
+        stack = t.stack((t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 0),
+                                  requires_grad=self.var_on, dtype=t.float64),
+                         t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 1),
+                                  requires_grad=self.var_on, dtype=t.float64)), dim=2)
+        factor = stack.repeat(1, 1, n_stag)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=[i for i in range(n_agnt * self.horizon, n_agnt * (self.horizon + n_stag))
+                                   if i % n_agnt in {0, 1}],
+                        to_cols=t.tensor(range(n_vars - (n_agnt - 1) * n_stag,
+                                               n_vars - (n_agnt - 1) * n_stag + n_stag)).repeat_interleave(2).tolist())
+
+        # factors between u_2j - z_2j
+        start += n_slices
+        n_slices = n_stag
+        factor = t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 2),
+                          requires_grad=self.var_on,
+                          dtype=t.float64).repeat(n_stag, 1, 1).transpose(0, 1).transpose(1, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=self._get_var_indices([new_var('u', 2, j+1) for j in range(n_stag)]),
+                        to_cols=list(range(n_vars - (n_agnt - 1) * n_stag, n_vars - (n_agnt - 1) * n_stag + n_stag)))
+
+        # factors between d_ij - z_ij, i>2
+        start += n_slices
+        n_slices = n_stag * (n_agnt - 2)
+        if n_agnt == 2:
+            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+        else:
+            factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 1),
+                              requires_grad=self.var_on,
+                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=[i for i in range(n_agnt * self.horizon, n_agnt * (self.horizon + n_stag))
+                                   if i % n_agnt not in {0, 1}],
+                        to_cols=self._get_var_indices([new_var('z', i+1, j+1)
+                                                       for j in range(n_stag) for i in range(2, n_agnt)]))
+
+        # factors between u_ij - z_ij, i>2
+        start += n_slices
+        n_slices = n_stag * (n_agnt - 2)
+        if n_agnt == 2:
+            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+        else:
+            factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 2),
+                              requires_grad=self.var_on,
+                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=self._get_var_indices([new_var('u', i + 1, j + 1)
+                                                         for j in range(n_stag) for i in range(2, n_agnt)]),
+                        to_cols=self._get_var_indices([new_var('z', i + 1, j + 1)
+                                                       for j in range(n_stag) for i in range(2, n_agnt)]))
+
+        # factors between u_ij - z_ij, i>2
+        start += n_slices
+        n_slices = n_stag * (n_agnt - 2)
+        if n_agnt == 2:
+            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+        else:
+            factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 0),
+                              requires_grad=self.var_on,
+                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+        if self.is_cuda:
+            factor = factor.cuda()
+        self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
+                        from_cols=self._get_var_indices([new_var('u', i, j + 1)
+                                                         for j in range(n_stag) for i in range(2, n_agnt)]),
+                        to_cols=self._get_var_indices([new_var('z', i + 1, j + 1)
+                                                       for j in range(n_stag) for i in range(2, n_agnt)]))
+
+        # generate a sparse matrix representation of the message indices to variables that receive messages
+        self.mrf.message_to_map = t.sparse.DoubleTensor(
+            t.tensor([self.mrf.t_rows, self.mrf.t_cols], dtype=t.long),
+            t.ones(len(self.mrf.t_rows)).double(),
+            t.Size([2 * self.mrf.num_edges, len(self.mrf.variables)])
+        ).requires_grad_(self.var_on)
+
+        if self.is_cuda:
+            self.mrf.message_to_map = self.mrf.message_to_map.cuda()
+
+        # store an array that lists which variable each message is sent to
+        self.mrf.message_to = t.zeros(2 * self.mrf.num_edges, dtype=t.long)
+        self.mrf.message_to[t.tensor(self.mrf.t_rows, dtype=t.long)] = t.tensor(self.mrf.t_cols, dtype=t.long)
+        if self.is_cuda:
+            self.mrf.message_to = self.mrf.message_to.cuda()
+            self.mrf.message_to[t.tensor(self.mrf.t_rows,
+                                         dtype=t.long).cuda()] = t.tensor(self.mrf.t_cols, dtype=t.long).cuda()
+
+        # store an array that lists which variable each message is received from
+        self.mrf.message_from = t.zeros(2 * self.mrf.num_edges, dtype=t.long)
+        self.mrf.message_from[t.tensor(self.mrf.f_rows, dtype=t.long)] = t.tensor(self.mrf.f_cols, dtype=t.long)
+        if self.is_cuda:
+            self.mrf.message_from = self.mrf.message_from.cuda()
+            self.mrf.message_from[t.tensor(self.mrf.f_rows,
+                                           dtype=t.long).cuda()] = t.tensor(self.mrf.f_cols, dtype=t.long).cuda()
+
+        self.build = 2
 
     def update_model(self):
         """
         Updates the mrf model by clamping the current position of the agents
         :return: None
         """
-        for j, agent_pos in enumerate(self.aPos):
-            agent_index = j + 1
-            var_key = new_var('x', self.time, agent_index)
-            factor = t.tensor(self.N*[self.MIN], dtype=t.float64)
-            factor[self.get_index(agent_pos)] = self.NEU
-            self.mrf.set_unary_factor(var_key, factor)
-        self.mrf.create_matrices()  # IMPORTANT
+        if self.build == 1:
+            for j, agent_pos in enumerate(self.aPos):
+                agent_index = j + 1
+                var_key = new_var('x', self.time, agent_index)
+                factor = t.tensor(self.N*[self.MIN], dtype=t.float64)
+                factor[self.get_index(agent_pos)] = self.NEU
+                self.mrf.set_unary_factor(var_key, factor)
+            self.mrf.create_matrices()  # IMPORTANT
+        elif self.build == 2:
+            self._clamp_agents()
 
     def infer(self, max_iter=30000):
         """
@@ -233,6 +523,10 @@ class TorchStagHuntModel(StagHuntModel):
         :param break_ties: Way in which ties are broken, either random or first
         :return: None
         """
+
+        if not self.build:
+            raise Exception("Model must be built before running the game")
+
         for i in range(self.horizon - 1):
             self.infer()
             self.compute_probabilities()
@@ -243,7 +537,8 @@ class TorchStagHuntModel(StagHuntModel):
             for agent in range(1, len(self.aPos) + 1):
                 trajectory = []
                 for i in range(1, self.horizon + 1):
-                    position_index = t.argmax(self.mrf.unary_potentials['x' + str(i) + str(agent)]).item()
+                    var_index = self.mrf.var_index[new_var('x', i, agent)]
+                    position_index = t.argmax(self.mrf.unary_mat[:, var_index]).item()
                     trajectory.append(self.get_pos(position_index))
                 if trajectory[-1] in self.hPos:
                     sth = 'hare'

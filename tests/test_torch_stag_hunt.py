@@ -2,20 +2,37 @@ import unittest
 import random
 import numpy as np
 import torch as t
-from staghunt import MatrixStagHuntModel, TorchStagHuntModel, new_var
+from staghunt import StagHuntModel, MatrixStagHuntModel, TorchStagHuntModel, new_var
 
 
-class TestStagHunt(unittest.TestCase):
+class TestTorchStagHunt(unittest.TestCase):
     """
     Unit test class for belief propagation implementation
     """
+
+    def test_phi_q_factor(self):
+        """
+        Correctness of the phi_q factor efficient computation by comparing it with the explicit way of computing it
+        :return: None
+        """
+        sh_model = StagHuntModel()
+        sh_model.MIN = -float('inf')
+        th_model = TorchStagHuntModel()
+        size = (random.randint(5, 20), random.randint(5, 20))
+        sh_model.size = size
+        th_model.size = size
+
+        sh_phi_q = sh_model.build_phi_q()
+        th_phi_q = th_model.build_phi_q()
+
+        assert t.equal(t.tensor(sh_phi_q, dtype=t.float64), th_phi_q)
 
     def test_ground_vs_pairwise(self):
         """
         TORCH: Correctness of the simplified pairwise model vs the ground truth model
         :return: None
         """
-        ground_model, pairwise_model = setup_two_models(type1='torch', type2='torch')
+        ground_model, pairwise_model = setup_two_models(type1='torch', type2='torch', num_agents=2)
 
         ground_model.build_ground_model()
         pairwise_model.build_model()
@@ -125,8 +142,35 @@ class TestStagHunt(unittest.TestCase):
             assert compare_beliefs(cpu_model.bp.conditional_probabilities, cuda_model.bp.conditional_probabilities), \
                 "Conditional probabilities differ"
 
+    def test_fast_build_tensors(self):
+        """
+        The fast-built unary matrix coincides with the one built from the potentials by the mrftools object
+        :return:
+        """
+        fast_model, slow_model = setup_two_models(type1='torch', type2='torch')
+        fast_model.fast_build_model()
+        slow_model.build_model()
 
-def setup_two_models(num_agents=2, type1='python', type2='python'):
+        for var, index_slow in slow_model.mrf.var_index.items():
+            index_fast = fast_model.mrf.var_index[var]
+            assert np.equal(slow_model.mrf.unary_mat[:, index_slow], fast_model.mrf.unary_mat[:, index_fast]).all()
+
+        fast_model, slow_model = setup_two_models()
+        fast_model.fast_build_model()
+        slow_model.build_model()
+        assert len(fast_model.mrf.message_index) == len(slow_model.mrf.message_index)
+        for var, index_slow in slow_model.mrf.message_index.items():
+            if var in fast_model.mrf.message_index.keys():
+                index_fast = fast_model.mrf.message_index[var]
+                assert np.equal(slow_model.mrf.edge_pot_tensor[:, :, index_slow],
+                                fast_model.mrf.edge_pot_tensor[:, :, index_fast]).all()
+            else:
+                index_fast = fast_model.mrf.message_index[var[::-1]]
+                assert np.equal(slow_model.mrf.edge_pot_tensor[:, :, index_slow].T,
+                                fast_model.mrf.edge_pot_tensor[:, :, index_fast]).all()
+
+
+def setup_two_models(num_agents=None, type1='python', type2='python'):
     """
     Utility to set up two different instances of StagHuntMRF with the exact same random configuration
     :param num_agents: Number of agents
@@ -149,7 +193,10 @@ def setup_two_models(num_agents=2, type1='python', type2='python'):
     r_h = random.randint(-5, -1)
     r_s = random.randint(-10, -5)
     horizon = random.randint(4, 15)
-    size = random.randint(5, 10)
+    size = random.randint(5, 15)
+
+    if not num_agents:
+        num_agents = random.randint(2, size // 2)
 
     model_1.lmb = lmb
     model_1.r_h = r_h

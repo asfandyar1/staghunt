@@ -12,5 +12,5 @@ setup(
     author_email='albert.iribarne@gmail.com',
     description='Sparse Matrix Belief Propagation on a multi-agent Stag-Hunt game', install_requires=['numpy',
                                                                                                       'matplotlib',
-                                                                                                      'torch']
+                                                                                                      'torch', 'scipy']
 )

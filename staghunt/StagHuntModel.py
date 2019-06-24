@@ -24,6 +24,7 @@ class StagHuntModel(StagHuntGame):
         self.NEU = NEU
         self.mrf = None
         self.bp = None
+        self.build = None
 
     def phi_q(self, x1, x2):
         """
@@ -40,6 +41,18 @@ class StagHuntModel(StagHuntGame):
               (x2_x == x1_x + 1) and (x2_y == x1_y) and (x1_x < self.size[0]) or \
               (x2_x == x1_x) and (x2_y == x1_y + 1) and (x1_y < self.size[1])
         return self.NEU if ind else self.MIN
+
+    def build_phi_q(self):
+        """
+        Inefficient way to compute the pairwise factor between agent vars (uncontrolled dynamics)
+        :return:
+        """
+        phi_q = [[self.NEU]*self.N for _ in range(self.N)]
+        for i in range(self.N):
+            for j in range(self.N):
+                phi_q[i][j] = self.phi_q(self.get_pos(i), self.get_pos(j))
+
+        return phi_q
 
     def phi_r1(self, d1, d2, u1):
         """
@@ -100,6 +113,9 @@ class StagHuntModel(StagHuntGame):
         a_pos = self.get_pos(a_index)
         return a_pos
 
+    def _get_var_indices(self, var_array):
+        return [self.mrf.var_index[var] for var in var_array]
+
     def reset_game(self):
         """
         Reset the game to the state it began, agents at locations of the first clamping, no bp nor mrf objects, time=1
@@ -107,12 +123,19 @@ class StagHuntModel(StagHuntGame):
         """
         if self.mrf:
             a_pos = []
-            for agent in range(1, len(self.aPos)+1):
-                a_pos.append(self._get_agent_pos(self.mrf.unary_potentials[new_var('x', 1, agent)]))
+
+            if len(self.mrf.unary_mat) and self.mrf.var_len is not None:
+                for agent in range(1, len(self.aPos) + 1):
+                    var_index = self._get_var_indices([new_var('x', 1, agent)])[0]
+                    a_pos.append(self._get_agent_pos(self.mrf.unary_mat[:,var_index]))
+            else:
+                for agent in range(1, len(self.aPos) + 1):
+                    a_pos.append(self._get_agent_pos(self.mrf.unary_potentials[new_var('x', 1, agent)]))
             self.aPos = a_pos
             self.bp = None
             self.mrf = None
             self.time = 1
+        self.build = None
 
     def display(self):
         """
