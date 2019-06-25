@@ -169,6 +169,29 @@ class TestTorchStagHunt(unittest.TestCase):
                 assert np.equal(slow_model.mrf.edge_pot_tensor[:, :, index_slow].T,
                                 fast_model.mrf.edge_pot_tensor[:, :, index_fast]).all()
 
+    def test_fast_build_beliefs(self):
+        """
+        TORCH: Consistency between python and torch matrix BP
+        :return:
+        """
+        fast_model, slow_model = setup_two_models(type1='torch', type2='torch')
+        fast_model.fast_build_model()
+        slow_model.build_model()
+
+        for i in range(slow_model.horizon - 1):
+            print("Fast: ", end='')
+            fast_model.infer()
+            fast_model.fast_move_next(break_ties='first')
+            fast_model._clamp_agents()
+
+            print("Slow:  ", end='')
+            slow_model.infer()
+            slow_model.compute_probabilities()
+            slow_model.move_next(break_ties='first')
+            slow_model.update_model()
+
+            assert slow_model.aPos == fast_model.aPos, "Trajectories differ"
+
 
 def setup_two_models(num_agents=None, type1='python', type2='python'):
     """

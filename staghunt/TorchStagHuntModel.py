@@ -445,16 +445,13 @@ class TorchStagHuntModel(StagHuntModel):
         Updates the mrf model by clamping the current position of the agents
         :return: None
         """
-        if self.build == 1:
-            for j, agent_pos in enumerate(self.aPos):
-                agent_index = j + 1
-                var_key = new_var('x', self.time, agent_index)
-                factor = t.tensor(self.N*[self.MIN], dtype=t.float64)
-                factor[self.get_index(agent_pos)] = self.NEU
-                self.mrf.set_unary_factor(var_key, factor)
-            self.mrf.create_matrices()  # IMPORTANT
-        elif self.build == 2:
-            self._clamp_agents()
+        for j, agent_pos in enumerate(self.aPos):
+            agent_index = j + 1
+            var_key = new_var('x', self.time, agent_index)
+            factor = t.tensor(self.N * [self.MIN], dtype=t.float64)
+            factor[self.get_index(agent_pos)] = self.NEU
+            self.mrf.set_unary_factor(var_key, factor)
+        self.mrf.create_matrices()  # IMPORTANT
 
     def infer(self, max_iter=30000):
         """
@@ -466,7 +463,11 @@ class TorchStagHuntModel(StagHuntModel):
         bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on)
         bp.set_max_iter(max_iter)
         bp.infer(display='final')
-        bp.load_beliefs()
+        if self.build != 2:
+            bp.load_beliefs()
+        else:
+            bp.compute_beliefs()
+            bp.compute_pairwise_beliefs()
         self.bp = bp
 
     def compute_probabilities(self):
@@ -516,6 +517,26 @@ class TorchStagHuntModel(StagHuntModel):
             self.aPos[i] = self.get_pos(i_to)
         self.time += 1
 
+    def fast_move_next(self, break_ties='random'):
+        trans_tensor = t.exp(self.bp.pair_belief_tensor)
+        for i in range(len(self.aPos)):
+            mes_key = (new_var('x', self.time, i + 1), new_var('x', self.time + 1, i + 1))
+            mes_ind = self.mrf.message_index[mes_key]
+            var_ind = self.mrf.var_index[new_var('x', self.time, i + 1)]
+            trans_mat = trans_tensor[:, :, mes_ind]
+            trans_mat = t.transpose(t.transpose(trans_mat, 0, 1) / t.exp(self.bp.belief_mat[:, var_ind]), 0, 1)
+            trans_mat[t.isnan(trans_mat)] = 0
+            index = t.argmax(trans_mat).item()
+            i_from, i_to = index // trans_mat.size()[0], index % trans_mat.size()[0]
+            if break_ties == 'first':  # TESTING: need to be able to go always to the same destination (matrix VS torch)
+                i_to = t.isclose(trans_mat, trans_mat[i_from, i_to]).nonzero().t()[1][0].item()
+            elif break_ties == 'random':  # NORMALLY: we break ties randomly
+                possibilities = t.isclose(trans_mat, trans_mat[i_from, i_to]).nonzero().t()[1]
+                random_index = t.randint(0, list(possibilities.size())[0], (1,)).item()
+                i_to = possibilities[random_index].item()
+            self.aPos[i] = self.get_pos(i_to)
+        self.time += 1
+
     def run_game(self, verbose=True, break_ties='random'):
         """
         Run the inference to the horizon clamping the variables at every time step as decisions are taken
@@ -527,11 +548,17 @@ class TorchStagHuntModel(StagHuntModel):
         if not self.build:
             raise Exception("Model must be built before running the game")
 
-        for i in range(self.horizon - 1):
-            self.infer()
-            self.compute_probabilities()
-            self.move_next(break_ties=break_ties)
-            self.update_model()
+        if self.build == 2:
+            for i in range(self.horizon - 1):
+                self.infer()
+                self.fast_move_next(break_ties=break_ties)
+                self._clamp_agents()
+        else:
+            for i in range(self.horizon - 1):
+                self.infer()
+                self.compute_probabilities()
+                self.move_next(break_ties=break_ties)
+                self.update_model()
         # Print trajectories and preys in final positions if verbose
         if verbose:
             for agent in range(1, len(self.aPos) + 1):
