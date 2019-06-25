@@ -553,6 +553,9 @@ class TorchStagHuntModel(StagHuntModel):
                 self.infer()
                 self.fast_move_next(break_ties=break_ties)
                 self._clamp_agents()
+                if t.cuda.is_available():
+                    t.cuda.empty_cache()
+                    t.cuda.ipc_collect()
         else:
             for i in range(self.horizon - 1):
                 self.infer()

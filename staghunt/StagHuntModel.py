@@ -132,7 +132,9 @@ class StagHuntModel(StagHuntGame):
                 for agent in range(1, len(self.aPos) + 1):
                     a_pos.append(self._get_agent_pos(self.mrf.unary_potentials[new_var('x', 1, agent)]))
             self.aPos = a_pos
+            del self.bp
             self.bp = None
+            del self.mrf
             self.mrf = None
             self.time = 1
         self.build = None
