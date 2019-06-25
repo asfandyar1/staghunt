@@ -461,7 +461,7 @@ class TorchStagHuntModel(StagHuntModel):
             self.mrf.set_unary_factor(var_key, factor)
         self.mrf.create_matrices()  # IMPORTANT
 
-    def infer(self, max_iter=30000):
+    def infer(self, max_iter=500):
         """
         Runs matrix inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object.
         :param max_iter: Max number of iterations of BP
@@ -473,7 +473,7 @@ class TorchStagHuntModel(StagHuntModel):
         if self.dtype == t.float64:
             tolerance = 1e-8
         else:
-            tolerance = 1e-5
+            tolerance = 1e-4
         bp.infer(display='final', tolerance=tolerance)
         if self.build != 2:
             bp.load_beliefs()
