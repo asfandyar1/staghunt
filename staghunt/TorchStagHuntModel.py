@@ -414,11 +414,18 @@ class TorchStagHuntModel(StagHuntModel):
                                                        for j in range(n_stag) for i in range(2, n_agnt)]))
 
         # generate a sparse matrix representation of the message indices to variables that receive messages
-        self.mrf.message_to_map = t.sparse.DoubleTensor(
-            t.tensor([self.mrf.t_rows, self.mrf.t_cols], dtype=t.long),
-            t.ones(len(self.mrf.t_rows)).double(),
-            t.Size([2 * self.mrf.num_edges, len(self.mrf.variables)])
-        ).requires_grad_(self.var_on)
+        if self.dtype == t.float64:
+            self.mrf.message_to_map = t.sparse.DoubleTensor(
+                t.tensor([self.mrf.t_rows, self.mrf.t_cols], dtype=t.long),
+                t.ones(len(self.mrf.t_rows)).double(),
+                t.Size([2 * self.mrf.num_edges, len(self.mrf.variables)])
+            ).requires_grad_(self.var_on)
+        else:
+            self.mrf.message_to_map = t.sparse.FloatTensor(
+                t.tensor([self.mrf.t_rows, self.mrf.t_cols], dtype=t.long),
+                t.ones(len(self.mrf.t_rows)).double(),
+                t.Size([2 * self.mrf.num_edges, len(self.mrf.variables)])
+            ).requires_grad_(self.var_on)
 
         if self.is_cuda:
             self.mrf.message_to_map = self.mrf.message_to_map.cuda()
