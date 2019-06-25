@@ -16,6 +16,7 @@ class TorchStagHuntModel(StagHuntModel):
         self.is_cuda = is_cuda
         self.var_on = var_on
         self.MIN = -float('inf')
+        self.dtype = t.float64
 
     def _set_agent_vars(self, mn):
         """
@@ -31,12 +32,12 @@ class TorchStagHuntModel(StagHuntModel):
                 agent_index = j + 1
                 var_key = new_var('x', i, agent_index)
                 if i == 1:  # t = 1 initial state -> clamp
-                    factor = t.tensor(self.N * [self.MIN], dtype=t.float64)
+                    factor = t.tensor(self.N * [self.MIN], dtype=self.dtype)
                     factor[self.get_index(agent_pos)] = self.NEU
                 elif i < self.horizon:  # t = 2,...,T-1 -> uniform
-                    factor = t.tensor(self.N*[self.NEU], dtype=t.float64)
+                    factor = t.tensor(self.N*[self.NEU], dtype=self.dtype)
                 else:  # t = T -> \prod_{k=1}^{k=H}phi_{h_k}
-                    factor = t.tensor(self.N*[self.NEU], dtype=t.float64)
+                    factor = t.tensor(self.N*[self.NEU], dtype=self.dtype)
                     for hare_pos in self.hPos:
                         factor[self.get_index(hare_pos)] = -self.r_h / self.lmb
                 # set factor
@@ -48,7 +49,7 @@ class TorchStagHuntModel(StagHuntModel):
         Efficient way to compute the pairwise factor between agent vars (uncontrolled dynamics)
         :return:
         """
-        phi_q = self.MIN * t.ones(self.N, self.N, requires_grad=self.var_on, dtype=t.float64)
+        phi_q = self.MIN * t.ones(self.N, self.N, requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             phi_q = phi_q.cuda()
 
@@ -97,7 +98,7 @@ class TorchStagHuntModel(StagHuntModel):
         mn = self._set_uncontrolled_dynamics(mn)
 
         # stag control factor -> ones and stag reward when both agents are in the position of a stag
-        factor = self.NEU * t.ones(self.N, self.N, dtype=t.float64)
+        factor = self.NEU * t.ones(self.N, self.N, dtype=self.dtype)
         for stag_pos in self.sPos:
             s_ind = self.get_index(stag_pos)
             factor[s_ind, s_ind] = -self.r_s / self.lmb
@@ -127,39 +128,39 @@ class TorchStagHuntModel(StagHuntModel):
                 stag_index = j + 1
                 # declare d_ij variables and set uniform unary potentials
                 var_key_d = 'd' + str(agent_index) + str(stag_index)
-                mn.set_unary_factor(var_key_d, t.tensor(2*[self.NEU], dtype=t.float64))
+                mn.set_unary_factor(var_key_d, t.tensor(2*[self.NEU], dtype=self.dtype))
                 # declare u_{ij} variables and set uniform unary potentials
                 if agent_index > 1:
                     var_key_u = new_var('u', agent_index, stag_index)
-                    mn.set_unary_factor(var_key_u, t.tensor(3*[self.NEU], dtype=t.float64))
+                    mn.set_unary_factor(var_key_u, t.tensor(3*[self.NEU], dtype=self.dtype))
                     var_key_z = new_var('z', agent_index, stag_index)
                     if agent_index == 2:
-                        mn.set_unary_factor(var_key_z, t.tensor(12*[self.NEU], dtype=t.float64))
+                        mn.set_unary_factor(var_key_z, t.tensor(12*[self.NEU], dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, new_var('d', agent_index-1, stag_index)),
                                            t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 0),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, var_key_d),
                                            t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 1),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, var_key_u),
                                            t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 2),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
                     else:
-                        mn.set_unary_factor(var_key_z, t.tensor(18*[self.NEU], dtype=t.float64))
+                        mn.set_unary_factor(var_key_z, t.tensor(18*[self.NEU], dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, var_key_d),
                                            t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 1),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, var_key_u),
                                            t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 2),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
                         mn.set_edge_factor((var_key_z, new_var('u', agent_index-1, stag_index)),
                                            t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 0),
-                                                    dtype=t.float64))
+                                                    dtype=self.dtype))
 
                 # build and set phi_{s_j} potentials
                 var_key_x = new_var('x', self.horizon, agent_index)
                 # inefficient but obvious way to fill the potential phi_{s_j}
-                phi_s = self.MIN * t.ones(self.N, 2, dtype=t.float64)
+                phi_s = self.MIN * t.ones(self.N, 2, dtype=self.dtype)
                 for x in range(phi_s.shape[0]):
                     for d in range(phi_s.shape[1]):
                         if d == kronecker_delta(x, self.get_index(stag_pos)):
@@ -167,7 +168,7 @@ class TorchStagHuntModel(StagHuntModel):
 
                 mn.set_edge_factor((var_key_x, var_key_d), phi_s)
 
-        factor = t.tensor(3*[self.NEU], dtype=t.float64)
+        factor = t.tensor(3*[self.NEU], dtype=self.dtype)
         factor[2] = -self.r_s / self.lmb
         for j in range(len(self.sPos)):
             mn.set_unary_factor(new_var('u', len(self.aPos), j+1), factor)
@@ -181,7 +182,7 @@ class TorchStagHuntModel(StagHuntModel):
         Util that clamps the position of the agents to the current time index
         :return:
         """
-        factors = self.MIN * t.ones((self.N, len(self.aPos)), requires_grad=self.var_on, dtype=t.float64)
+        factors = self.MIN * t.ones((self.N, len(self.aPos)), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factors = factors.cuda()
         for index, agent in enumerate(self.aPos):
@@ -226,7 +227,7 @@ class TorchStagHuntModel(StagHuntModel):
         n_agnt = len(self.aPos)
         n_vars = n_agnt * self.horizon + n_stag * (n_agnt + 2 * (n_agnt - 1))
         n_edges = n_agnt * (self.horizon - 1) + n_agnt * n_stag + 3 * (n_agnt - 1) * n_stag
-        self.mrf.degrees = t.zeros(n_vars, requires_grad=self.var_on, dtype=t.float64)
+        self.mrf.degrees = t.zeros(n_vars, requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             self.mrf.degrees = self.mrf.degrees.cuda()
 
@@ -252,7 +253,7 @@ class TorchStagHuntModel(StagHuntModel):
         self.mrf.variables = set(self.mrf.var_list)
 
         # UNARY POTENTIALS MATRIX
-        self.mrf.unary_mat = -float('inf') * t.ones((self.N, n_vars), requires_grad=self.var_on, dtype=t.float64)
+        self.mrf.unary_mat = -float('inf') * t.ones((self.N, n_vars), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             self.mrf.unary_mat = self.mrf.unary_mat.cuda()
         # clamped agent vars
@@ -260,7 +261,7 @@ class TorchStagHuntModel(StagHuntModel):
         # non-clamped agent vars
         col_start = n_agnt
         col_end = n_agnt * self.horizon
-        factor = self.NEU * t.ones((self.N, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        factor = self.NEU * t.ones((self.N, col_end - col_start), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[:, t.arange(n_agnt, col_end)] = factor
@@ -269,31 +270,31 @@ class TorchStagHuntModel(StagHuntModel):
         # d vars
         col_start = col_end
         col_end = col_start + n_agnt*n_stag
-        factor = self.NEU * t.ones((2, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        factor = self.NEU * t.ones((2, col_end - col_start), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[0:2, col_start:col_end] = factor
         # u vars
         col_start = col_end
         col_end = col_start + n_stag*(n_agnt - 1)
-        factor = self.NEU * t.ones((3, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        factor = self.NEU * t.ones((3, col_end - col_start), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[0:3, col_start:col_end] = factor
-        factor = (-self.r_s / self.lmb) * t.ones(n_stag, requires_grad=self.var_on, dtype=t.float64)
+        factor = (-self.r_s / self.lmb) * t.ones(n_stag, requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[2, self._get_var_indices([new_var('u', n_agnt, i+1) for i in range(n_stag)])] = factor
         # z vars
         col_start = col_end
         col_end = col_start + n_stag
-        factor = self.NEU * t.ones((12, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        factor = self.NEU * t.ones((12, col_end - col_start), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[0:12, col_start:col_end] = factor
         col_start = col_end
         col_end = col_start + n_stag*(n_agnt - 2)
-        factor = self.NEU * t.ones((18, col_end - col_start), requires_grad=self.var_on, dtype=t.float64)
+        factor = self.NEU * t.ones((18, col_end - col_start), requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             factor = factor.cuda()
         self.mrf.unary_mat[0:18, col_start:col_end] = factor
@@ -301,7 +302,7 @@ class TorchStagHuntModel(StagHuntModel):
         # EDGE POTENTIALS TENSOR
         self.mrf.num_edges = n_edges
         self.mrf.edge_pot_tensor = -float('inf') * t.ones((self.N, self.N, 2 * self.mrf.num_edges),
-                                                          requires_grad=self.var_on, dtype=t.float64)
+                                                          requires_grad=self.var_on, dtype=self.dtype)
         if self.is_cuda:
             self.mrf.edge_pot_tensor = self.mrf.edge_pot_tensor.cuda()
         self.mrf.message_index = {}
@@ -321,8 +322,8 @@ class TorchStagHuntModel(StagHuntModel):
         # phi_s potentials between x vars and d vars
         start += n_slices
         n_slices = n_agnt * n_stag
-        stack = t.stack((self.NEU * t.ones(self.N, requires_grad=self.var_on, dtype=t.float64),
-                         self.MIN * t.ones(self.N, requires_grad=self.var_on, dtype=t.float64)))
+        stack = t.stack((self.NEU * t.ones(self.N, requires_grad=self.var_on, dtype=self.dtype),
+                         self.MIN * t.ones(self.N, requires_grad=self.var_on, dtype=self.dtype)))
         factor = stack.repeat((n_agnt*n_stag, 1, 1)).transpose(0, 1).transpose(1, 2)
         if self.is_cuda:
             factor = factor.cuda()
@@ -337,9 +338,9 @@ class TorchStagHuntModel(StagHuntModel):
         start += n_slices
         n_slices = 2 * n_stag
         stack = t.stack((t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 0),
-                                  requires_grad=self.var_on, dtype=t.float64),
+                                  requires_grad=self.var_on, dtype=self.dtype),
                          t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 1),
-                                  requires_grad=self.var_on, dtype=t.float64)), dim=2)
+                                  requires_grad=self.var_on, dtype=self.dtype)), dim=2)
         factor = stack.repeat(1, 1, n_stag)
         if self.is_cuda:
             factor = factor.cuda()
@@ -354,7 +355,7 @@ class TorchStagHuntModel(StagHuntModel):
         n_slices = n_stag
         factor = t.tensor(self.edge_factor(([0, 1], [0, 1], [0, 1, 2]), 2),
                           requires_grad=self.var_on,
-                          dtype=t.float64).repeat(n_stag, 1, 1).transpose(0, 1).transpose(1, 2)
+                          dtype=self.dtype).repeat(n_stag, 1, 1).transpose(0, 1).transpose(1, 2)
         if self.is_cuda:
             factor = factor.cuda()
         self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
@@ -365,11 +366,11 @@ class TorchStagHuntModel(StagHuntModel):
         start += n_slices
         n_slices = n_stag * (n_agnt - 2)
         if n_agnt == 2:
-            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+            factor = t.tensor([], requires_grad=self.var_on, dtype=self.dtype)
         else:
             factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 1),
                               requires_grad=self.var_on,
-                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+                              dtype=self.dtype).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
         if self.is_cuda:
             factor = factor.cuda()
         self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
@@ -382,11 +383,11 @@ class TorchStagHuntModel(StagHuntModel):
         start += n_slices
         n_slices = n_stag * (n_agnt - 2)
         if n_agnt == 2:
-            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+            factor = t.tensor([], requires_grad=self.var_on, dtype=self.dtype)
         else:
             factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 2),
                               requires_grad=self.var_on,
-                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+                              dtype=self.dtype).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
         if self.is_cuda:
             factor = factor.cuda()
         self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
@@ -399,11 +400,11 @@ class TorchStagHuntModel(StagHuntModel):
         start += n_slices
         n_slices = n_stag * (n_agnt - 2)
         if n_agnt == 2:
-            factor = t.tensor([], requires_grad=self.var_on, dtype=t.float64)
+            factor = t.tensor([], requires_grad=self.var_on, dtype=self.dtype)
         else:
             factor = t.tensor(self.edge_factor(([0, 1, 2], [0, 1], [0, 1, 2]), 0),
                               requires_grad=self.var_on,
-                              dtype=t.float64).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
+                              dtype=self.dtype).repeat(n_stag * (n_agnt - 2), 1, 1).transpose(0, 1).transpose(1, 2)
         if self.is_cuda:
             factor = factor.cuda()
         self._fast_util(f_start=start, n_slices=n_slices, chunk=factor,
@@ -448,7 +449,7 @@ class TorchStagHuntModel(StagHuntModel):
         for j, agent_pos in enumerate(self.aPos):
             agent_index = j + 1
             var_key = new_var('x', self.time, agent_index)
-            factor = t.tensor(self.N * [self.MIN], dtype=t.float64)
+            factor = t.tensor(self.N * [self.MIN], dtype=self.dtype)
             factor[self.get_index(agent_pos)] = self.NEU
             self.mrf.set_unary_factor(var_key, factor)
         self.mrf.create_matrices()  # IMPORTANT
