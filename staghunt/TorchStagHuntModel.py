@@ -461,7 +461,7 @@ class TorchStagHuntModel(StagHuntModel):
         :return: None
         """
 
-        bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on)
+        bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on, dtype=self.dtype)
         bp.set_max_iter(max_iter)
         bp.infer(display='final')
         if self.build != 2:
