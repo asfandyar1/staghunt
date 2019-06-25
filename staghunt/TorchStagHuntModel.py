@@ -48,7 +48,7 @@ class TorchStagHuntModel(StagHuntModel):
         Efficient way to compute the pairwise factor between agent vars (uncontrolled dynamics)
         :return:
         """
-        phi_q = t.zeros(self.N, self.N, requires_grad=self.var_on, dtype=t.float64).fill_(self.MIN)
+        phi_q = self.MIN * t.ones(self.N, self.N, requires_grad=self.var_on, dtype=t.float64)
         if self.is_cuda:
             phi_q = phi_q.cuda()
 
@@ -97,7 +97,7 @@ class TorchStagHuntModel(StagHuntModel):
         mn = self._set_uncontrolled_dynamics(mn)
 
         # stag control factor -> ones and stag reward when both agents are in the position of a stag
-        factor = t.zeros(self.N, self.N, dtype=t.float64).fill_(self.NEU)
+        factor = self.NEU * t.ones(self.N, self.N, dtype=t.float64)
         for stag_pos in self.sPos:
             s_ind = self.get_index(stag_pos)
             factor[s_ind, s_ind] = -self.r_s / self.lmb
@@ -159,7 +159,7 @@ class TorchStagHuntModel(StagHuntModel):
                 # build and set phi_{s_j} potentials
                 var_key_x = new_var('x', self.horizon, agent_index)
                 # inefficient but obvious way to fill the potential phi_{s_j}
-                phi_s = t.zeros(self.N, 2, dtype=t.float64).fill_(self.MIN)
+                phi_s = self.MIN * t.ones(self.N, 2, dtype=t.float64)
                 for x in range(phi_s.shape[0]):
                     for d in range(phi_s.shape[1]):
                         if d == kronecker_delta(x, self.get_index(stag_pos)):
