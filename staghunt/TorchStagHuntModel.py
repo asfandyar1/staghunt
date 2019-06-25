@@ -423,7 +423,7 @@ class TorchStagHuntModel(StagHuntModel):
         else:
             self.mrf.message_to_map = t.sparse.FloatTensor(
                 t.tensor([self.mrf.t_rows, self.mrf.t_cols], dtype=t.long),
-                t.ones(len(self.mrf.t_rows)).double(),
+                t.ones(len(self.mrf.t_rows)),
                 t.Size([2 * self.mrf.num_edges, len(self.mrf.variables)])
             ).requires_grad_(self.var_on)
 
@@ -470,7 +470,11 @@ class TorchStagHuntModel(StagHuntModel):
 
         bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on, dtype=self.dtype)
         bp.set_max_iter(max_iter)
-        bp.infer(display='final')
+        if self.dtype == t.float64:
+            tolerance = 1e-8
+        else:
+            tolerance = 1e-5
+        bp.infer(display='final', tolerance=tolerance)
         if self.build != 2:
             bp.load_beliefs()
         else:
