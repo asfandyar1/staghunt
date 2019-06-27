@@ -160,11 +160,12 @@ class StagHuntGame:
         Utility to copy the game configuration from one instance to another
         :return: None
         """
-        return self.size, self.aPos.copy(), self.hPos.copy(), self.sPos.copy()
+        return (self.size, self.aPos.copy(), self.hPos.copy(), self.sPos.copy(),
+                self.r_h, self.r_s, self.lmb, self.horizon)
 
     def set_game_config(self, game_conf):
         """
         Utility to set the game configuration coming from another instance
         :return: None
         """
-        self.size, self.aPos,  self.hPos, self.sPos = game_conf
+        self.size, self.aPos,  self.hPos, self.sPos, self.r_h, self.r_s, self.lmb, self.horizon = game_conf

@@ -162,11 +162,12 @@ class StagHuntModel(StagHuntGame):
                     trajectory = []
                     for t in range(1, self.time + 1):
                         if len(self.mrf.unary_mat) and self.mrf.var_len is not None:
-                            var_index = self._get_var_indices([new_var('x', 1, agent)])[0]
+                            var_index = self._get_var_indices([new_var('x', t, agent)])[0]
                             a_pos = self._get_agent_pos(self.mrf.unary_mat[:, var_index])
                         else:
-                            a_pos = self._get_agent_pos(self.mrf.unary_potentials[new_var('x', 1, agent)])
+                            a_pos = self._get_agent_pos(self.mrf.unary_potentials[new_var('x', t, agent)])
                         trajectory.append(list(a_pos))
+                    print(trajectory)
                     plt.plot(list(list(zip(*trajectory))[0]), list(list(zip(*trajectory))[1]), linewidth=0.8, color='k')
                     plt.scatter([trajectory[0][0]], [trajectory[0][1]], facecolors='none', edgecolors='k')
 

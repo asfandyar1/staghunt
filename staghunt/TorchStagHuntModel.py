@@ -127,7 +127,7 @@ class TorchStagHuntModel(StagHuntModel):
             for j, stag_pos in enumerate(self.sPos):
                 stag_index = j + 1
                 # declare d_ij variables and set uniform unary potentials
-                var_key_d = 'd' + str(agent_index) + str(stag_index)
+                var_key_d = new_var('d', agent_index, stag_index)
                 mn.set_unary_factor(var_key_d, t.tensor(2*[self.NEU], dtype=self.dtype))
                 # declare u_{ij} variables and set uniform unary potentials
                 if agent_index > 1:
