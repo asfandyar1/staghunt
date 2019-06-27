@@ -13,7 +13,7 @@ random.seed(30)  # reproducibility
 matrix = MatrixStagHuntModel()
 matrix.MIN = -np.inf
 
-df = pd.DataFrame(columns=['Zero', '-Inf', 'Total'])
+df = pd.DataFrame(columns=['N', 'M', 'S', 'Horizon', 'Zero', '-Inf', 'Total'])
 for n in range(5, 6):
     N = n * n
     for M in range(2, int(0.8 * 2 * N / 7)):
@@ -28,5 +28,4 @@ for n in range(5, 6):
                         'Zero': unique_dict[0.],
                         '-Inf': unique_dict[-float('inf')],
                         'Total': np.prod(matrix.mrf.edge_pot_tensor.shape)}, ignore_index=True)
-
 df.to_pickle(args.out)
