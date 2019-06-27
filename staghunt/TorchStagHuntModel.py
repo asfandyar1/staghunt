@@ -474,7 +474,7 @@ class TorchStagHuntModel(StagHuntModel):
             tolerance = 1e-8
         else:
             tolerance = 1e-4
-        bp.infer(display='final', tolerance=tolerance)
+        bp.infer(display='none', tolerance=tolerance)
         if self.build != 2:
             bp.load_beliefs()
         else:

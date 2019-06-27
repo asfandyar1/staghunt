@@ -393,7 +393,7 @@ class MatrixStagHuntModel(StagHuntModel):
         else:
             bp = BeliefPropagator(self.mrf)  # DEFAULT: slow BP
         bp.set_max_iter(max_iter)
-        bp.infer(display='final')
+        bp.infer(display='none')
         bp.load_beliefs()
         self.bp = bp
 
