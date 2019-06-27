@@ -4,3 +4,5 @@ __pycache__/
 build/
 dist/
 staghunt.egg-info/
+ground_truth.ipynb
+stuff.ipynb

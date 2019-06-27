@@ -1,7 +1,12 @@
 import random
+import argparse
 import pandas as pd
 import numpy as np
 from staghunt import MatrixStagHuntModel
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--out', type=str, help='path to the output file')
+args = parser.parse_args()
 
 random.seed(30)  # reproducibility
 
@@ -24,4 +29,4 @@ for n in range(5, 6):
                         '-Inf': unique_dict[-float('inf')],
                         'Total': np.prod(matrix.mrf.edge_pot_tensor.shape)}, ignore_index=True)
 
-df.to_pickle('../results/sparsity.pkl')
+df.to_pickle(args.out)
