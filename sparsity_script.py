@@ -15,6 +15,7 @@ matrix.MIN = -np.inf
 
 df = pd.DataFrame(columns=['N', 'M', 'S', 'Horizon', 'Zero', '-Inf', 'Total'])
 for n in range(5, 6):
+
     N = n * n
     for M in range(2, int(0.8 * 2 * N / 7)):
         matrix.new_game_sample(size=(n, n), num_agents=M)
