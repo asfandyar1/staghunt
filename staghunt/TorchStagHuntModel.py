@@ -461,9 +461,10 @@ class TorchStagHuntModel(StagHuntModel):
             self.mrf.set_unary_factor(var_key, factor)
         self.mrf.create_matrices()  # IMPORTANT
 
-    def infer(self, max_iter=500):
+    def infer(self, max_iter=1000, display='none'):
         """
         Runs matrix inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object.
+        :param display: belief propagation verbosity: none, final or iter
         :param max_iter: Max number of iterations of BP
         :return: None
         """
@@ -474,7 +475,7 @@ class TorchStagHuntModel(StagHuntModel):
             tolerance = 1e-8
         else:
             tolerance = 1e-4
-        bp.infer(display='none', tolerance=tolerance)
+        bp.infer(display=display, tolerance=tolerance)
         if self.build != 2:
             bp.load_beliefs()
         else:
@@ -549,9 +550,10 @@ class TorchStagHuntModel(StagHuntModel):
             self.aPos[i] = self.get_pos(i_to)
         self.time += 1
 
-    def run_game(self, verbose=True, break_ties='random'):
+    def run_game(self, verbose=True, break_ties='random', display='none'):
         """
         Run the inference to the horizon clamping the variables at every time step as decisions are taken
+        :param display: belief propagation verbosity: none, final or iter
         :param verbose: Prints info about the agents final positions
         :param break_ties: Way in which ties are broken, either random or first
         :return: None
@@ -562,7 +564,7 @@ class TorchStagHuntModel(StagHuntModel):
 
         if self.build == 2:
             for i in range(self.horizon - 1):
-                self.infer()
+                self.infer(display=display)
                 self.fast_move_next(break_ties=break_ties)
                 self._clamp_agents()
                 if t.cuda.is_available():

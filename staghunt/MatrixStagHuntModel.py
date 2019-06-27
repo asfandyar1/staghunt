@@ -380,9 +380,10 @@ class MatrixStagHuntModel(StagHuntModel):
         elif self.build == 2:
             self._clamp_agents()
 
-    def infer(self, inference_type=None, max_iter=30000):
+    def infer(self, inference_type=None, max_iter=30000, display='none'):
         """
         Runs matrix inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object.
+        :param display: belief propagation verbosity: none, final or iter.
         :param inference_type: Type of inference: slow - python loops BP OR matrix - sparse matrix BP
         :param max_iter: Max number of iterations of BP
         :return: None
@@ -393,7 +394,7 @@ class MatrixStagHuntModel(StagHuntModel):
         else:
             bp = BeliefPropagator(self.mrf)  # DEFAULT: slow BP
         bp.set_max_iter(max_iter)
-        bp.infer(display='none')
+        bp.infer(display=display)
         bp.load_beliefs()
         self.bp = bp
 
@@ -441,9 +442,10 @@ class MatrixStagHuntModel(StagHuntModel):
             self.aPos[i] = self.get_pos(i_to)
         self.time += 1
 
-    def run_game(self, inference_type='matrix', verbose=True, break_ties='random'):
+    def run_game(self, inference_type='matrix', display='none', verbose=True, break_ties='random'):
         """
         Run the inference to the horizon clamping the variables at every time step as decisions are taken
+        :param display: belief propagation iter verbosity: none, final or iter
         :param inference_type: Type of inference: slow - python loops BP OR matrix - sparse matrix BP
         :param verbose: Prints info about the agents final positions
         :param break_ties: Way in which ties are broken, either random or first
@@ -454,7 +456,7 @@ class MatrixStagHuntModel(StagHuntModel):
             raise Exception("Model must be built before running the game")
 
         for i in range(self.horizon - 1):
-            self.infer(inference_type=inference_type)
+            self.infer(inference_type=inference_type, display=display)
             self.compute_probabilities()
             self.move_next(break_ties=break_ties)
             self.update_model()
