@@ -25,9 +25,9 @@ if is_available():
     init()
 n_iter = 5
 data = pd.DataFrame(columns=['LMB', 'N', 'M', 'Horizon', 'loopy_time', 'matrix_time', 'cpu_time', 'gpu_time'])
-for n in range(5, 10):
+for n in range(5, 16):
     N = n*n
-    for M in range(2, int(0.5*2*N/7)):  # number of ranges up to ~80% of the grid capacity
+    for M in range(2, int(0.28*2*N/7)):  # number of ranges up to ~80% of the grid capacity
 
         loopy_time, matrix_time, cpu_time, gpu_time = [], [], [], []
         for i in range(n_iter):
