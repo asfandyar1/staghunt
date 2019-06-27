@@ -461,7 +461,7 @@ class TorchStagHuntModel(StagHuntModel):
             self.mrf.set_unary_factor(var_key, factor)
         self.mrf.create_matrices()  # IMPORTANT
 
-    def infer(self, max_iter=1000, display='none'):
+    def infer(self, max_iter=30000, display='none'):
         """
         Runs matrix inference on the current MRF. Sets the object bp to the resulting BeliefPropagator object.
         :param display: belief propagation verbosity: none, final or iter

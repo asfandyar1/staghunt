@@ -1,5 +1,6 @@
 """Test class to test stag hunt game implementation"""
 import unittest
+import random
 
 from staghunt import *
 
