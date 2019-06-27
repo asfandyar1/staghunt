@@ -194,7 +194,6 @@ class StagHuntModel(StagHuntGame):
                         else:
                             a_pos = self._get_agent_pos(self.mrf.unary_potentials[new_var('x', t, agent)])
                         trajectory.append(list(a_pos))
-                    print(trajectory)
                     plt.plot(list(list(zip(*trajectory))[0]), list(list(zip(*trajectory))[1]), linewidth=0.8, color='k')
                     plt.scatter([trajectory[0][0]], [trajectory[0][1]], facecolors='none', edgecolors='k')
 
