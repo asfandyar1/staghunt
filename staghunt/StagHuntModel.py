@@ -1,3 +1,4 @@
+import random
 import itertools
 import matplotlib.pyplot as plt
 from .StagHuntGame import StagHuntGame
@@ -138,6 +139,33 @@ class StagHuntModel(StagHuntGame):
             self.mrf = None
             self.time = 1
         self.build = None
+
+    def new_game_sample(self, size, num_agents):
+        """
+        Generates a random game configuration of given size and number of agents
+        Number of hares is set to 2*num_agents, and number of stags to num_agents//2
+        :param size: size of the grid
+        :type size: tuple
+        :param num_agents:
+        :type num_agents: int
+        :return: none - changes state
+        """
+        self.reset_game()
+        # Number of things in the grid
+        num_things = 3 * num_agents + num_agents // 2
+        # Assert that size is compatible with the number of agents (there's no too many things and no space)
+        assert prod(size) > num_things
+        self.size = size
+        locations = set()
+        while len(locations) < num_things:
+            locations.add((random.randint(1, size[0]), random.randint(1, size[1])))
+        locations = list(locations)
+
+        self.aPos = locations[:num_agents]
+        locations = locations[num_agents:]
+        self.hPos = locations[:2*num_agents]
+        locations = locations[2*num_agents:]
+        self.sPos = locations
 
     def display(self):
         """
