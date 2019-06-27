@@ -15,10 +15,8 @@ matrix.MIN = -np.inf
 
 df = pd.DataFrame(columns=['N', 'M', 'S', 'Horizon', 'Zero', '-Inf', 'Total'])
 for n in range(5, 25):
-
     N = n * n
-    for M in range(2, int(0.5 * 2 * N / 7)):
-        print(n, M)
+    for M in range(2, int(0.28 * 2 * N / 7) + 1):  # 0.28 * 2 * 25 / 7 = 2, smallest instance 5x5
         matrix.reset_game()
         matrix.new_game_sample(size=(n, n), num_agents=M)
         matrix.fast_build_model()
