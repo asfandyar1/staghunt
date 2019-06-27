@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 import numpy as np
 from torch.cuda import is_available, init
-from staghunt import StagHuntGame, MatrixStagHuntModel, TorchStagHuntModel
+from staghunt import StagHuntModel, MatrixStagHuntModel, TorchStagHuntModel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--out', type=str, help='path to the output file')
@@ -13,7 +13,7 @@ args = parser.parse_args()
 
 random.seed(30)  # reproducibility
 
-model = StagHuntGame()
+model = StagHuntModel()
 model.lmb = args.lmb
 model.horizon = 20
 
@@ -29,6 +29,7 @@ for n in range(5, 10):
     N = n*n
     for M in range(2, int(0.5*2*N/7)):  # number of ranges up to ~80% of the grid capacity
 
+        loopy_time, matrix_time, cpu_time, gpu_time = [], [], [], []
         for i in range(n_iter):
             print("size: " + str((n, n)) + "\t" + "M: " + str(M) + "iter: ", str(i) + "/" + str(n_iter))
             model.new_game_sample(size=(n, n), num_agents=M)
@@ -49,38 +50,38 @@ for n in range(5, 10):
             t0 = time.time()
             loopy.run_game(inference_type='slow')
             t1 = time.time()
-            loopy_time = t1 - t0
+            loopy_time.append(t1 - t0)
             loopy.reset_game()
 
             t0 = time.time()
             matrix.run_game(inference_type='matrix')
             t1 = time.time()
-            matrix_time = t1 - t0
+            matrix_time.append(t1 - t0)
             matrix.reset_game()
 
             t0 = time.time()
             cpu.run_game()
             t1 = time.time()
-            cpu_time = t1 - t0
+            cpu_time.append(t1 - t0)
             cpu.reset_game()
 
             if is_available():
                 t0 = time.time()
                 gpu.run_game()
                 t1 = time.time()
-                gpu_time = t1 - t0
+                gpu_time.append(t1 - t0)
                 gpu.reset_game()
             else:
-                gpu_time = 0
+                gpu_time.append(0)
 
-            data = data.append({'LMB': model.lmb,
-                                'N': N,
-                                'M': M,
-                                'Horizon': model.horizon,
-                                'loopy_time': loopy_time,
-                                'matrix_time': matrix_time,
-                                'cpu_time': cpu_time,
-                                'gpu_time': gpu_time}, ignore_index=True)
+        data = data.append({'LMB': model.lmb,
+                            'N': N,
+                            'M': M,
+                            'Horizon': model.horizon,
+                            'loopy_time': np.average(loopy_time),
+                            'matrix_time': np.average(matrix_time),
+                            'cpu_time': np.average(cpu_time),
+                            'gpu_time': np.average(gpu_time)}, ignore_index=True)
 
 print("Save results to: " + args.out)
 data.to_pickle(args.out)
