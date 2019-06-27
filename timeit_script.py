@@ -23,13 +23,14 @@ cpu = TorchStagHuntModel(is_cuda=False, var_on=False)
 if is_available():
     gpu = TorchStagHuntModel(is_cuda=True, var_on=False)
     init()
-
+n_iter = 5
 data = pd.DataFrame(columns=['LMB', 'N', 'M', 'Horizon', 'loopy_time', 'matrix_time', 'cpu_time', 'gpu_time'])
 for n in range(5, 11):
     N = n*n
     for M in range(2, int(0.5*2*N/7)):  # number of ranges up to ~80% of the grid capacity
 
-        for _ in range(5):
+        for i in range(n_iter):
+            print("size: " + str((n, n)) + "\t" + "M: " + str(M) + "iter: ", str(i) + "/" + str(n_iter))
             model.new_game_sample(size=(n, n), num_agents=M)
             conf = model.get_game_config()
 
