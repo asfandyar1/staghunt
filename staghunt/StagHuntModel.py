@@ -150,7 +150,6 @@ class StagHuntModel(StagHuntGame):
         :type num_agents: int
         :return: none - changes state
         """
-        self.reset_game()
         # Number of things in the grid
         num_things = 3 * num_agents + num_agents // 2
         # Assert that size is compatible with the number of agents (there's no too many things and no space)
@@ -167,7 +166,7 @@ class StagHuntModel(StagHuntGame):
         locations = locations[2*num_agents:]
         self.sPos = locations
 
-    def display(self):
+    def display(self, file=None):
         """
         Prints the game state on the screen
         :return: None
@@ -204,4 +203,7 @@ class StagHuntModel(StagHuntGame):
             plt.xticks(list(range(1, size_x + 1)))
             plt.yticks(list(range(1, size_y + 1)))
             plt.grid(linestyle='dotted')
-            plt.show()
+            if file:
+                plt.savefig(file, dpi=100, format='eps')
+            else:
+                plt.show()
