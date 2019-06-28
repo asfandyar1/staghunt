@@ -204,5 +204,6 @@ class StagHuntModel(StagHuntGame):
             plt.grid(linestyle='dotted')
             if file:
                 plt.savefig(file, dpi=100, format='eps')
+                plt.close()
             else:
                 plt.show()
