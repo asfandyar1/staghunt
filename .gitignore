@@ -5,5 +5,4 @@ build/
 dist/
 staghunt.egg-info/
 .eggs/
-ground_truth.ipynb
-stuff.ipynb
+.DS_Store

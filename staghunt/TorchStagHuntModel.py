@@ -550,7 +550,7 @@ class TorchStagHuntModel(StagHuntModel):
             self.aPos[i] = self.get_pos(i_to)
         self.time += 1
 
-    def run_game(self, verbose=True, break_ties='random', display='none'):
+    def run_game(self, verbose=True, break_ties='random', display='none', max_iter=30000):
         """
         Run the inference to the horizon clamping the variables at every time step as decisions are taken
         :param display: belief propagation verbosity: none, final or iter
@@ -564,7 +564,7 @@ class TorchStagHuntModel(StagHuntModel):
 
         if self.build == 2:
             for i in range(self.horizon - 1):
-                self.infer(display=display)
+                self.infer(display=display, max_iter=max_iter)
                 self.fast_move_next(break_ties=break_ties)
                 self._clamp_agents()
                 if t.cuda.is_available():
@@ -572,7 +572,7 @@ class TorchStagHuntModel(StagHuntModel):
                     t.cuda.ipc_collect()
         else:
             for i in range(self.horizon - 1):
-                self.infer()
+                self.infer(display=display, max_iter=max_iter)
                 self.compute_probabilities()
                 self.move_next(break_ties=break_ties)
                 self.update_model()

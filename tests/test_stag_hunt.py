@@ -1,8 +1,8 @@
 """Test class to test stag hunt game implementation"""
-import unittest
 import random
-
-from staghunt import *
+import unittest
+import numpy as np
+from staghunt import StagHuntModel, MatrixStagHuntModel, new_var
 
 
 class TestStagHunt(unittest.TestCase):

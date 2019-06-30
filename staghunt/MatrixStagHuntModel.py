@@ -442,7 +442,7 @@ class MatrixStagHuntModel(StagHuntModel):
             self.aPos[i] = self.get_pos(i_to)
         self.time += 1
 
-    def run_game(self, inference_type='matrix', display='none', verbose=True, break_ties='random'):
+    def run_game(self, inference_type='matrix', display='none', verbose=True, break_ties='random', max_iter=30000):
         """
         Run the inference to the horizon clamping the variables at every time step as decisions are taken
         :param display: belief propagation iter verbosity: none, final or iter
@@ -456,7 +456,7 @@ class MatrixStagHuntModel(StagHuntModel):
             raise Exception("Model must be built before running the game")
 
         for i in range(self.horizon - 1):
-            self.infer(inference_type=inference_type, display=display)
+            self.infer(inference_type=inference_type, display=display, max_iter=max_iter)
             self.compute_probabilities()
             self.move_next(break_ties=break_ties)
             self.update_model()
