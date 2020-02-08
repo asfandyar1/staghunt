@@ -1,8 +1,8 @@
 """Miscellaneous utility functions and classes"""
 
 import gc
-from numpy import vectorize, float64
-from torch import is_tensor
+import numpy as np
+import torch as t
 
 
 def kronecker_delta(i, j):
@@ -13,7 +13,7 @@ def _round_by_tol(x, tol):
     return x if x > tol else 0
 
 
-round_by_tol = vectorize(_round_by_tol, otypes=[float64])
+round_by_tol = np.vectorize(_round_by_tol, otypes=[np.float64])
 
 
 def prod(x):
@@ -31,7 +31,7 @@ def prod(x):
 
 def memory_report():
     for o in gc.get_objects():
-        if is_tensor(o):
+        if t.is_tensor(o):
             print(o.device, o.dtype, tuple(o.shape))
 
 
