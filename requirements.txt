@@ -1,0 +1,11 @@
+# local project
+-e .
+
+# requirements
+numpy
+scipy
+torch
+git+https://bitbucket.org/berthuang/mrftools.git
+
+matplotlib
+Pillow
