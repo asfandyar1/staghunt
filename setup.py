@@ -6,11 +6,17 @@ setup(
     packages=find_packages(),
     test_suite='nose.collector',
     tests_require=['nose'],
-    url='https://github.com/airibarne/msthesis',
+    url='https://github.com/airibarne/staghunt',
     license='MIT',
     author='Albert Iribarne',
     author_email='albert.iribarne@gmail.com',
-    description='Sparse Matrix Belief Propagation on a multi-agent Stag-Hunt game', install_requires=['numpy',
-                                                                                                      'matplotlib',
-                                                                                                      'torch', 'scipy']
+    description='Sparse Matrix Belief Propagation on a multi-agent Stag-Hunt game',
+    install_requires=[
+        'numpy',
+        'pandas',
+        'matplotlib',
+        'torch',
+        'scipy',
+    ]
 )
+
