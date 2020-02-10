@@ -1,7 +1,7 @@
 import torch as t
 from mrftools import TorchMarkovNet, TorchMatrixBeliefPropagator
 from .StagHuntModel import StagHuntModel
-from .util import *
+from .util import new_var, kronecker_delta
 
 
 class TorchStagHuntModel(StagHuntModel):
