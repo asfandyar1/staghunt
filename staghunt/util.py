@@ -43,4 +43,4 @@ def new_var(var_name, t_index, agent):
     :param agent: agent index
     :return: string with the name of the variable
     """
-    return var_name + str(t_index) + '_' + str(agent)
+    return f"{var_name}{t_index}_{agent}"
