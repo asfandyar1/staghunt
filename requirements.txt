@@ -3,9 +3,11 @@
 
 # requirements
 numpy
+pandas
 scipy
 torch
-git+https://bitbucket.org/berthuang/mrftools.git
+
+git+https://bitbucket.org/airibarne/mrftools.git@pytorch-merge
 
 matplotlib
 Pillow
