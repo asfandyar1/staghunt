@@ -469,7 +469,7 @@ class TorchStagHuntModel(StagHuntModel):
         :return: None
         """
 
-        bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on, dtype=self.dtype)
+        bp = TorchMatrixBeliefPropagator(self.mrf, is_cuda=self.is_cuda, var_on=self.var_on)
         bp.set_max_iter(max_iter)
         if self.dtype == t.float64:
             tolerance = 1e-8
