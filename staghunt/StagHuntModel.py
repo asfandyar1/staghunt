@@ -35,11 +35,13 @@ class StagHuntModel(StagHuntGame):
         """
         x1_x, x1_y = x1
         x2_x, x2_y = x2
-        ind = ((x2_x == x1_x) and (x2_y == x1_y)) or \
-              (x2_x == x1_x - 1) and (x2_y == x1_y) and (x1_x > 0) or \
-              (x2_x == x1_x) and (x2_y == x1_y - 1) and (x1_y > 0) or \
-              (x2_x == x1_x + 1) and (x2_y == x1_y) and (x1_x < self.size[0]) or \
-              (x2_x == x1_x) and (x2_y == x1_y + 1) and (x1_y < self.size[1])
+        ind = (
+            ((x2_x == x1_x) and (x2_y == x1_y))
+            or (x2_x == x1_x - 1) and (x2_y == x1_y) and (x1_x > 0)
+            or (x2_x == x1_x) and (x2_y == x1_y - 1) and (x1_y > 0)
+            or (x2_x == x1_x + 1) and (x2_y == x1_y) and (x1_x < self.size[0])
+            or (x2_x == x1_x) and (x2_y == x1_y + 1) and (x1_y < self.size[1])
+        )
         return self.NEU if ind else self.MIN
 
     def build_phi_q(self):
