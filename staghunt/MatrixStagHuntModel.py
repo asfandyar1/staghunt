@@ -63,21 +63,6 @@ class MatrixStagHuntModel(StagHuntModel):
 
         return phi_q
 
-    def _set_uncontrolled_dynamics(self, mn):
-        """
-        Sets the uncontrolled dynamics pairwise factors phi_q: (x11,x21),...,(x(T-1)1,xT1),...,(x(T-1)M,xTM)
-        :param mn: MarkovNet object
-        :return: Modified MarkovNet object
-        """
-        # build the phi_q factor, which is the same for every variable pair
-        phi_q = self.build_phi_q()
-        # and set the factor forming the chains
-        for i in range(1, self.horizon):
-            for j in range(1, len(self.aPos) + 1):
-                var_keys = (new_var('x', i, j), new_var('x', i + 1, j))
-                mn.set_edge_factor(var_keys, phi_q)
-        return mn
-
     def build_ground_model(self):
         """
         Builds the mrftools MarkovNet ground truth model based on the game definition
