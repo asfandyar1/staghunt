@@ -7,6 +7,6 @@ pandas
 scipy
 torch
 
-git+https://bitbucket.org/airibarne/mrftools.git@pytorch-merge
+# git+https://bitbucket.org/airibarne/mrftools.git@pytorch-merge
 
 matplotlib

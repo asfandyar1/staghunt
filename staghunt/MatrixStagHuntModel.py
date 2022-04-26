@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import coo_matrix
-from mrftools import MarkovNet, BeliefPropagator, MatrixBeliefPropagator
+from .mrftools.mrftools import MarkovNet, BeliefPropagator, MatrixBeliefPropagator
 from .StagHuntModel import StagHuntModel
 from .util import *
 
