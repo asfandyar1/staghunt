@@ -47,6 +47,7 @@ class MatrixStagHuntModel(StagHuntModel):
         Efficient way to compute the pairwise factor between agent vars (uncontrolled dynamics)
         :return:
         """
+
         phi_q = np.full((self.N, self.N), self.MIN, dtype=np.float64)
         # fill diagonal
         phi_q[range(self.N), range(self.N)] = self.NEU
@@ -382,6 +383,7 @@ class MatrixStagHuntModel(StagHuntModel):
         bp.infer(display=display)
         bp.load_beliefs()
         self.bp = bp
+        # self.display()
 
     def compute_probabilities(self):
         """

@@ -1,5 +1,5 @@
 import torch as t
-from mrftools import TorchMarkovNet, TorchMatrixBeliefPropagator
+from .mrftools.mrftools import TorchMarkovNet, TorchMatrixBeliefPropagator
 from .StagHuntModel import StagHuntModel
 from .util import new_var, kronecker_delta
 

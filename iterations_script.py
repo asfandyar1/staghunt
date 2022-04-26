@@ -3,8 +3,9 @@ import time
 import numpy as np
 import pandas as pd
 from torch.cuda import is_available
-from mrftools import TorchMatrixBeliefPropagator
+from staghunt.mrftools.mrftools import TorchMatrixBeliefPropagator
 from staghunt import TorchStagHuntModel
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--out', type=str, help='path to the output file')
@@ -16,26 +17,26 @@ args = parser.parse_args()
 
 cuda = is_available()
 
-model = TorchStagHuntModel(is_cuda=cuda)
+model = TorchStagHuntModel()
 
 df = pd.DataFrame(columns=['lmb', 'num_iter'])
 for i in range(args.niter):
 
     model.new_game_sample(size=(args.size, args.size), num_agents=args.M)
     for lmb in np.arange(1, 101) / 10:
-
-        with open('/homedtic/airibarne/jobs/iterations.txt') as f:
+        with open('C:\\Users\\asfan\\PycharmProjects\\staghunt\\jobs\\iterations.txt', 'w') as f:
             f.write(str(i) + '-' + str(lmb) + '\t' + str(time.time()) + '\n')
 
         model.lmb = lmb
         model.horizon = args.h
-        model.fast_build_model()
+        model.build_model()
         print(model.lmb)
-        bp = TorchMatrixBeliefPropagator(model.mrf, is_cuda=cuda, var_on=False)
+        bp = TorchMatrixBeliefPropagator(model.mrf)
         bp.set_max_iter(3000)
-        niter = bp.infer(display='none')
+        model.mrf.set_max_iter(3000)
+        niter = model.infer(inference_type='matrix', display='full', max_iter=3000)
         model.reset_game()
-        df = df.append({'lmb': lmb,
-                        'num_iter': niter}, ignore_index=True)
+        df_dict = pd.DataFrame({'lmb': lmb, 'num_iter': niter}, index=[0])
+        df = pd.concat([df, df_dict], ignore_index=True)
 
 df.to_pickle(args.out)
