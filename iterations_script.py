@@ -26,12 +26,12 @@ for i in range(args.niter):
     model.new_game_sample(size=(args.size, args.size), num_agents=args.M)
     for lmb in np.arange(1, 101) / 10:
 
-        with open('/home/asfandyar/jobs/iterations.txt') as f:
+        with open('C:\\Users\\asfan\\PycharmProjects\\staghunt\\jobs\\iterations.txt', 'w') as f:
             f.write(str(i) + '-' + str(lmb) + '\t' + str(time.time()) + '\n')
 
         model.lmb = lmb
         model.horizon = args.h
-        model.fast_build_model()
+        model.build_model()
         print(model.lmb)
         bp = TorchMatrixBeliefPropagator(model.mrf, is_cuda=cuda, var_on=False)
         bp.set_max_iter(3000)
