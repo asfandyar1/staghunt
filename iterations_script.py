@@ -25,7 +25,7 @@ for i in range(args.niter):
     model.new_game_sample(size=(args.size, args.size), num_agents=args.M)
     for lmb in np.arange(1, 101) / 10:
         # with open('C:\\Users\\asfan\\PycharmProjects\\staghunt\\jobs\\iterations.txt', 'a+') as f:
-        with open('/home/asfandyar/jobs/iterations_sparse.txt', 'a') as f:
+        with open('/home/asfandyar/jobs/iterations.txt', 'a') as f:
             f.write(str(i) + '-' + str(lmb) + '\t' + str(time.time()) + '\n')
         start_time = time.time()
         model.lmb = lmb
